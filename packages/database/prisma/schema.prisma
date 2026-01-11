@@ -1,0 +1,417 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  phone         String?
+  emailVerified DateTime?
+  password      String?   // Hashed password
+  image         String?
+  role          String    @default("user") // 'user' | 'admin'
+  roleId        String?
+  userRole      Role?     @relation(fields: [roleId], references: [id])
+  isBanned      Boolean   @default(false)
+  
+  // Organization & Reporting
+  parentId      String?
+  parent        User?     @relation("UserReporting", fields: [parentId], references: [id])
+  subordinates  User[]    @relation("UserReporting")
+  memberships   OrganizationMember[]
+  overrides     PermissionOverride[]
+  joinRequests  OrganizationJoinRequest[]
+
+  accounts      Account[]
+  sessions      Session[]
+  chats         Chat[]
+  collaborations Collaborator[]
+  apiKey        String? // User's custom Gemini API key
+  memories      Memory[]
+  checkpoints   Checkpoint[]
+  checkpointComments CheckpointComment[]
+  mergeRequests MergeRequest[]
+  mergeComments MergeComment[]
+  authenticators Authenticator[]
+  usageLogs     UsageLog[]
+  adminAIChats  AdminAIChat[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Organization {
+  id          String               @id @default(cuid())
+  name        String               @unique
+  slug        String               @unique
+  description String?
+  logo        String?
+  banner      String?
+  pointOfContactName  String?
+  pointOfContactEmail String?
+  pointOfContactPhone String?
+  onboardingProfile   Json?
+  members     OrganizationMember[]
+  roles       Role[]               @relation("OrgRoles")
+  links       OrganizationLink[]
+  requests    OrganizationJoinRequest[]
+  overrides   OrgPermissionOverride[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+model OrganizationLink {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleId         String?      // Default role assigned to joiners
+  role           Role?        @relation(fields: [roleId], references: [id])
+  code           String       @unique @default(cuid())
+  label          String?
+  requiresApproval Boolean    @default(true)
+  isPrimary      Boolean      @default(false)
+  expiresAt      DateTime?
+  maxUses        Int?
+  useCount       Int          @default(0)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model OrganizationJoinRequest {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId         String?
+  status         String       @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, userId])
+}
+
+model OrgPermissionOverride {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissionId   String
+  permission     Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  value          Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, permissionId])
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId         String?
+  role           Role?        @relation(fields: [roleId], references: [id])
+  joinedAt       DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+}
+
+model Role {
+  id             String               @id @default(cuid())
+  name           String               @unique
+  description    String?
+  isSystem       Boolean              @default(false)
+  
+  // Scoping
+  organizationId String?
+  organization   Organization?        @relation("OrgRoles", fields: [organizationId], references: [id])
+  
+  users          User[]
+  members        OrganizationMember[]
+  permissions    Permission[]         @relation("RolePermissions")
+  links          OrganizationLink[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+model Permission {
+  id          String               @id @default(cuid())
+  name        String               @unique
+  description String?
+  roles       Role[]               @relation("RolePermissions")
+  overrides   PermissionOverride[]
+  orgOverrides OrgPermissionOverride[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+model PermissionOverride {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  value        Boolean    @default(true) // true = allow, false = explicit deny
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, permissionId])
+}
+
+model UsageLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   // e.g., 'login', 'chat_create', 'message_send', 'settings_update'
+  resource  String?  // ID of related resource (e.g., chatId)
+  details   Json?    // Extra metadata
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+}
+
+model SystemSettings {
+  key   String @id
+  value String
+}
+
+model AdminAIChat {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String           @default("New Session")
+  messages  AdminAIMessage[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId])
+}
+
+model AdminAIMessage {
+  id        String      @id @default(cuid())
+  chatId    String
+  chat      AdminAIChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      String      // 'user' | 'model'
+  content   String      @db.Text
+  proposal  Json?       // Stores proposed actions
+  createdAt DateTime    @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Authenticator {
+  credentialID         String  @id @map("credential_id")
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, credentialID])
+}
+
+model Chat {
+  id          String        @id @default(cuid())
+  title       String        @default("New Chat")
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  assets      Asset[]
+  collaborators Collaborator[]
+  branches    Branch[]
+  checkpoints Checkpoint[]
+  mergeRequests MergeRequest[]
+  isPublic    Boolean       @default(false)
+  config      Json?         // Stores Gemini specific settings (temp, top-p, etc)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      String   // 'user' or 'model'
+  content   String   @db.Text
+  images    String[] // Deprecated: Moving to Asset model
+  assets    Asset[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  url       String   @db.Text
+  role      String   // 'user' | 'model'
+  width     Int?
+  height    Int?
+  ratio     String?  // 'square' | 'landscape' | 'portrait'
+  labels    String[] // AI generated labels
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  messageId String?
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Collaborator {
+  id      String @id @default(cuid())
+  chatId  String
+  userId  String
+  chat    Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+}
+
+model Memory {
+  id        String   @id @default(cuid())
+  label     String
+  content   String   @db.Text
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  headId    String?
+  head      Checkpoint? @relation("BranchHead", fields: [headId], references: [id], onDelete: SetNull)
+  baseCheckpointId String?
+  baseCheckpoint   Checkpoint? @relation("BranchBase", fields: [baseCheckpointId], references: [id], onDelete: SetNull)
+  compiledState Json?
+  lastCompiledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checkpoints Checkpoint[]
+  mergeRequestsSource MergeRequest[] @relation("MergeSource")
+  mergeRequestsTarget MergeRequest[] @relation("MergeTarget")
+
+  @@index([chatId])
+  @@unique([chatId, name])
+}
+
+model Checkpoint {
+  id        String   @id @default(cuid())
+  label     String
+  summary   String?
+  delta     Json
+  comment   String?
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Checkpoint? @relation("CheckpointParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Checkpoint[] @relation("CheckpointParent")
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments CheckpointComment[]
+  headFor  Branch[] @relation("BranchHead")
+  baseFor  Branch[] @relation("BranchBase")
+  mergedInto MergeRequest[] @relation("MergeCheckpoint")
+
+  @@index([chatId])
+  @@index([branchId])
+}
+
+model CheckpointComment {
+  id           String   @id @default(cuid())
+  checkpointId String
+  checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content      String   @db.Text
+  createdAt    DateTime @default(now())
+
+  @@index([checkpointId])
+}
+
+model MergeRequest {
+  id            String   @id @default(cuid())
+  title         String
+  description   String?
+  status        String   @default("open")
+  chatId        String
+  chat          Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sourceBranchId String
+  sourceBranch   Branch  @relation("MergeSource", fields: [sourceBranchId], references: [id], onDelete: Cascade)
+  targetBranchId String
+  targetBranch   Branch  @relation("MergeTarget", fields: [targetBranchId], references: [id], onDelete: Cascade)
+  mergedCheckpointId String?
+  mergedCheckpoint   Checkpoint? @relation("MergeCheckpoint", fields: [mergedCheckpointId], references: [id], onDelete: SetNull)
+  mergeStrategy String?
+  createdById  String?
+  createdBy    User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  comments MergeComment[]
+
+  @@index([chatId])
+}
+
+model MergeComment {
+  id            String   @id @default(cuid())
+  mergeRequestId String
+  mergeRequest   MergeRequest @relation(fields: [mergeRequestId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content       String   @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([mergeRequestId])
+}

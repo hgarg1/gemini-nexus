@@ -1,0 +1,17 @@
+{
+  "name": "@repo/database",
+  "version": "0.0.0",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "scripts": {
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.x"
+  },
+  "devDependencies": {
+    "prisma": "^5.x",
+    "typescript": "^5.x"
+  }
+}

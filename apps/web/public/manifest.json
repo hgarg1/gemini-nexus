@@ -1,0 +1,35 @@
+{
+  "name": "Nexus Intelligence",
+  "short_name": "Nexus",
+  "description": "Advanced neural interface for collaborative intelligence.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00f2ff",
+  "icons": [
+    {
+      "src": "/window.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/window.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Neural Stream",
+      "url": "/chat",
+      "icons": [{ "src": "/file-text.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Admin Center",
+      "url": "/admin",
+      "icons": [{ "src": "/shield.svg", "sizes": "192x192" }]
+    }
+  ]
+}
