@@ -19,7 +19,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR (for pushing)
+      # Login to GHCR using the repo's token (works for pushing to GHCR under your account/org)
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -30,13 +31,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          file: ./dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ghcr.io/${{ github.repository_owner }}/nexus-intelligence:latest
+            ghcr.io/${{ github.repository_owner }}/nexus-intelligence:${{ github.sha }}
 
       - name: Deploy on GCE VM via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -47,13 +46,12 @@ jobs:
           script: |
             set -euo pipefail
 
-            # folder on VM that contains docker-compose.yml
             cd /opt/nexus-intelligence
 
-            # pull latest image from GHCR and recreate container
             docker compose pull
             docker compose up -d --remove-orphans
+
+            # update nginx snippet (domain + port for this app)
             sudo /usr/local/bin/nginx-proxy-snippet-sync nexus-intelligence.archiegarg.me 18002
 
-            # optional cleanup
             docker image prune -f
