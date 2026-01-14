@@ -7,7 +7,7 @@ COPY package.json package-lock.json ./
 # Copy workspace folders to preserve structure
 COPY apps/web ./apps/web
 COPY packages ./packages
-COPY prisma ./prisma
+COPY packages/db/prisma/ ./prisma
 
 # Install dependencies for the whole repo
 RUN npm ci
