@@ -53,7 +53,7 @@ jobs:
             # pull latest image from GHCR and recreate container
             docker compose pull
             docker compose up -d --remove-orphans
-            sudo /usr/local/bin/nginx-proxy-snippet-sync nexus-intelligence.archiegarg.me 18001
+            sudo /usr/local/bin/nginx-proxy-snippet-sync nexus-intelligence.archiegarg.me 18002
 
             # optional cleanup
             docker image prune -f
