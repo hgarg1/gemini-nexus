@@ -2,13 +2,15 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { TitleBar } from "@/components/desktop/title-bar";
+import { OfflineIndicator } from "@/components/desktop/offline-indicator";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Gemini Nexus | Advanced AI Hub",
   description: "The ultimate Google Gemini wrapper for professionals.",
-  manifest: "/manifest.json",
+  manifest: "/manifest-user.json",
 };
 
 export const viewport: Viewport = {
@@ -26,6 +28,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.className} bg-background text-foreground antialiased selection:bg-primary/30`} suppressHydrationWarning>
+        <TitleBar />
+        <OfflineIndicator />
         <div className="fixed inset-0 bg-cyber-grid bg-[size:40px_40px] pointer-events-none opacity-20" />
         <div className="relative z-10 min-h-screen">
           <Providers>{children}</Providers>

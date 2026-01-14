@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@repo/database";
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
+import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
@@ -28,6 +29,17 @@ export async function POST(req: NextRequest) {
     });
 
     if (!chat) return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+
+    const isOwner = chat.userId === userId;
+    const isCollaborator = chat.collaborators.some((c) => c.userId === userId);
+    if (!isOwner && !isCollaborator && !chat.isPublic) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { policy } = await getEffectiveChatPolicy(userId);
+    if (!policy.allowFileUploads && payloadImages.length > 0) {
+      return NextResponse.json({ error: "File uploads disabled by policy" }, { status: 403 });
+    }
 
     // 2. Create placeholder messages and Asset in DB
     const [userMsg, modelMsg] = await prisma.$transaction([
@@ -76,9 +88,34 @@ export async function POST(req: NextRequest) {
       userMessageId: userMsg.id
     });
 
+    // Fetch full user message with assets/reactions
+    const fullUserMsg = await prisma.message.findUnique({
+      where: { id: userMsg.id },
+      include: { 
+        assets: true,
+        reactions: {
+          include: {
+            user: { select: { id: true, name: true } }
+          }
+        }
+      }
+    });
+
+    const fullModelMsg = await prisma.message.findUnique({
+      where: { id: modelMsg.id },
+      include: { 
+        assets: true,
+        reactions: {
+          include: {
+            user: { select: { id: true, name: true } }
+          }
+        }
+      }
+    });
+
     return NextResponse.json({ 
-      userMessage: userMsg,
-      placeholderMessage: modelMsg 
+      userMessage: fullUserMsg,
+      placeholderMessage: fullModelMsg 
     });
   } catch (error: any) {
     console.error("Queue Error:", error);

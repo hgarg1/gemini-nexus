@@ -8,7 +8,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== "Super Admin") {
+  const userRole = (session?.user as any)?.role;
+  const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
+  if (!session?.user || !isAuthorized) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -27,7 +29,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== "Super Admin") {
+  const userRole = (session?.user as any)?.role;
+  const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
+  if (!session?.user || !isAuthorized) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

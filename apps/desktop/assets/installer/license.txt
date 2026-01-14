@@ -1,0 +1,36 @@
+NEXUS CORE: INTELLIGENCE PROTOCOL & USER ACCESS AGREEMENT
+VERSION: 2.0.26-ALPHA
+STATUS: RESTRICTED ACCESS
+
+1. PROVISION OF UPLINK
+This Agreement governs your initialization and continued operation of the Nexus Core Desktop Interface (the "Uplink"). By executing the binary and completing the installation sequence, you ("The Operative") acknowledge total compliance with the protocols established by Nexus Core Command.
+
+2. NEURAL INTERFACE LICENSE
+Nexus Core Command grants The Operative a non-exclusive, non-transferable authorization to utilize the holographic interface, intelligence fragments (.nexus files), and collaborative neural streams solely for intended tactical operations. 
+
+3. INTELLECTUAL PROPERTY & SOURCE CODE
+The Uplink, including but not limited to its visual aesthetics, cryptographic protocols, holographic rendering engines, and underlying neural architecture, remains the sole property of Nexus Core Command. Reverse-engineering, unauthorized decryption, or attempting to breach the secure vault through the Desktop Interface is a violation of the high-level security protocols and will result in immediate termination of access.
+
+4. DATA TRANSMISSION & TELEMETRY
+The Operative acknowledges that all transmissions via the Uplink are routed through the secure Nexus Cloud Infrastructure. While Nexus Core Command employs advanced encryption for all "Direct Signals" and "Squadron Comms", no uplink is immune to total system collapse. The Operative is responsible for the integrity of their own local hardware node.
+
+5. RESTRICTED MANEUVERS
+The Operative shall not:
+- Utilize the Uplink for the coordination of hostile rogue-AI activities.
+- Distribute decrypted intelligence fragments to non-cleared entities.
+- Bypass administrative blocks or attempt to spoof the identity of a Super Admin.
+- Modify the local CSS or binary files to remove "Nexus Core" branding or security watermarks.
+
+6. ACCESS TERMINATION
+Nexus Core Command reserves the right to sever the neural link at any time, with or without prior signal, should The Operative be found in violation of Section 5 or if the System Status reaches "CRITICAL_FAILURE". Upon termination, the local uninstaller must be executed to purge all cached intelligence fragments.
+
+7. NO WARRANTY (THE VOID CLAUSE)
+THE UPLINK IS PROVIDED "AS IS" AND "AS AVAILABLE". NEXUS CORE COMMAND DISCLAIMS ALL WARRANTIES, EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE STABILITY OF THE NEURAL CONNECTION, THE ACCURACY OF AI-GENERATED FRAGMENTS, OR THE IMMUNITY OF THE LOCAL NODE TO CYBERNETIC INFECTION. USE AT YOUR OWN PERIL.
+
+8. LIMITATION OF LIABILITY
+IN NO EVENT SHALL NEXUS CORE COMMAND BE LIABLE FOR DATA LOSS, NEURAL FATIGUE, OR HARDWARE OVERHEATING RESULTING FROM THE OPERATION OF THE DESKTOP INTERFACE.
+
+9. JURISDICTION
+This agreement is governed by the laws of the Nexus Virtual Jurisdiction, without regard to physical geographical boundaries or traditional nation-state legal systems.
+
+BY CLICKING "I AGREE" OR "ACCEPT", YOU BIND YOUR IDENTITY TO THESE PROTOCOLS. DATA INITIALIZATION WILL COMMENCE IMMEDIATELY.

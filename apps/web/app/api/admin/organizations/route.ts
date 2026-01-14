@@ -35,27 +35,42 @@ export async function POST(req: Request) {
       primaryInviteLabel
     } = await req.json();
 
-    const org = await prisma.organization.create({
-      data: { 
-        name, 
-        slug, 
-        description,
-        pointOfContactName,
-        pointOfContactEmail,
-        pointOfContactPhone
-      },
+    const roleName = `Org Admin - ${name}`;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const org = await tx.organization.create({
+        data: { 
+          name, 
+          slug, 
+          description,
+          pointOfContactName,
+          pointOfContactEmail,
+          pointOfContactPhone
+        },
+      });
+
+      const orgAdminRole = await tx.role.create({
+        data: {
+          name: roleName,
+          description: `Org admin for ${name}`,
+          organizationId: org.id
+        }
+      });
+
+      const primaryLink = await tx.organizationLink.create({
+        data: {
+          organizationId: org.id,
+          label: primaryInviteLabel || "Primary Invite",
+          requiresApproval: primaryInviteRequiresApproval ?? false,
+          isPrimary: true,
+          roleId: orgAdminRole.id
+        }
+      });
+
+      return { org, primaryLink };
     });
 
-    const primaryLink = await prisma.organizationLink.create({
-      data: {
-        organizationId: org.id,
-        label: primaryInviteLabel || "Primary Invite",
-        requiresApproval: primaryInviteRequiresApproval ?? true,
-        isPrimary: true
-      }
-    });
-
-    return NextResponse.json({ ...org, primaryLink });
+    return NextResponse.json({ ...result.org, primaryLink: result.primaryLink });
   } catch (error) {
     return NextResponse.json({ error: "Failed to create organization" }, { status: 500 });
   }

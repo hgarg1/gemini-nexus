@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ImagePlus, Mail, Phone, Save, User, X, Shield, Key } from "lucide-react";
+import { ArrowLeft, ImagePlus, Mail, Phone, Save, User, X, Shield, Key, Building2, Ban, Unlock } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { startRegistration } from "@simplewebauthn/browser";
@@ -37,6 +37,8 @@ export default function SettingsPage() {
   const [isRegisteringPasskey, setIsRegisteringPasskey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [memberships, setMemberships] = useState<any[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -60,8 +62,14 @@ export default function SettingsPage() {
 
     const loadProfile = async () => {
       try {
-        const res = await fetch("/api/user", { cache: "no-store" });
+        const [res, blockedRes] = await Promise.all([
+          fetch("/api/user", { cache: "no-store" }),
+          fetch("/api/user/blocked", { cache: "no-store" })
+        ]);
+        
         const data = await res.json();
+        const blockedData = await blockedRes.json();
+
         if (res.ok && data.user) {
           const next = {
             name: data.user.name ?? "",
@@ -70,6 +78,7 @@ export default function SettingsPage() {
           };
           setForm(next);
           setImage(data.user.image ?? null);
+          setMemberships(Array.isArray(data.user.memberships) ? data.user.memberships : []);
           initialRef.current = { ...next, image: data.user.image ?? null };
         } else {
           initialRef.current = {
@@ -78,7 +87,12 @@ export default function SettingsPage() {
             phone: (session?.user as any)?.phone ?? "",
             image: session?.user?.image ?? null,
           };
+          setMemberships([]);
           setError(data.error || "Unable to load profile");
+        }
+
+        if (blockedRes.ok && blockedData.blockedUsers) {
+          setBlockedUsers(blockedData.blockedUsers);
         }
       } catch (err) {
         initialRef.current = {
@@ -87,6 +101,8 @@ export default function SettingsPage() {
           phone: (session?.user as any)?.phone ?? "",
           image: session?.user?.image ?? null,
         };
+        setMemberships([]);
+        setBlockedUsers([]);
         setError("Unable to load profile");
       } finally {
         setIsLoading(false);
@@ -204,6 +220,24 @@ export default function SettingsPage() {
       setError(err.message || "Failed to register passkey");
     } finally {
       setIsRegisteringPasskey(false);
+    }
+  };
+
+  const handleUnblock = async (targetId: string) => {
+    try {
+      const res = await fetch("/api/user/blocked", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId }),
+      });
+      if (res.ok) {
+        setBlockedUsers(prev => prev.filter(u => u.id !== targetId));
+        setSuccess("User unblocked");
+      } else {
+        setError("Failed to unblock user");
+      }
+    } catch (err) {
+      setError("Failed to unblock user");
     }
   };
 
@@ -349,6 +383,105 @@ export default function SettingsPage() {
                     </span>
                   </button>
                 </div>
+              </div>
+
+              {/* Memberships Section */}
+              <div className="glass-panel rounded-[24px] border-white/10 p-6 space-y-5">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-black tracking-[0.3em] text-primary/60 uppercase">ORG_MEMBERSHIPS</div>
+                    <div className="text-sm font-bold mt-2">Active Sector Access</div>
+                    <p className="text-white/40 text-xs mt-1">
+                      Only approved or auto-joined sectors appear here.
+                    </p>
+                  </div>
+                  <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black tracking-[0.3em] text-white/60">
+                    {memberships.length} LINKED
+                  </div>
+                </div>
+
+                {memberships.length === 0 ? (
+                  <div className="py-10 text-center text-[10px] font-black tracking-[0.4em] uppercase text-white/20">
+                    NO_ACTIVE_SECTORS
+                  </div>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {memberships.map((membership) => (
+                      <div key={membership.organization.id} className="relative overflow-hidden rounded-[20px] border border-white/10 bg-white/5">
+                        {membership.organization.banner && (
+                          <div className="absolute inset-0 opacity-30">
+                            <img src={membership.organization.banner} alt={`${membership.organization.name} banner`} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <div className="relative z-10 p-5 flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
+                            {membership.organization.logo ? (
+                              <img src={membership.organization.logo} alt={`${membership.organization.name} logo`} className="w-full h-full object-cover" />
+                            ) : (
+                              <Building2 className="w-5 h-5 text-white/40" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-black uppercase truncate">{membership.organization.name}</div>
+                            <div className="text-[9px] text-primary font-mono uppercase">/{membership.organization.slug}</div>
+                            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-[8px] font-black uppercase tracking-[0.3em] text-primary">
+                              {membership.role?.name || "MEMBER"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Blocked Users Section */}
+              <div className="glass-panel rounded-[24px] border-white/10 p-6 space-y-5">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-black tracking-[0.3em] text-red-500/60 uppercase">BLOCKED_OPERATIVES</div>
+                    <div className="text-sm font-bold mt-2">Restricted Access List</div>
+                    <p className="text-white/40 text-xs mt-1">
+                      Users blocked from contacting you.
+                    </p>
+                  </div>
+                  <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black tracking-[0.3em] text-white/60">
+                    {blockedUsers.length} BLOCKED
+                  </div>
+                </div>
+
+                {blockedUsers.length === 0 ? (
+                  <div className="py-10 text-center text-[10px] font-black tracking-[0.4em] uppercase text-white/20">
+                    NO_BLOCKS_ACTIVE
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {blockedUsers.map((user) => (
+                      <div key={user.id} className="flex items-center justify-between p-4 rounded-[20px] bg-white/5 border border-white/5">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
+                            {user.image ? (
+                              <img src={user.image} alt={user.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-5 h-5 text-white/40" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold uppercase">{user.name || "UNKNOWN"}</div>
+                            <div className="text-[9px] text-white/30 font-mono">{user.email}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleUnblock(user.id)}
+                          className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                          title="Revoke Block"
+                        >
+                          <Unlock className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="glass-panel rounded-[24px] border-white/10 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-6">

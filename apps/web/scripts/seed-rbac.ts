@@ -25,6 +25,8 @@ const permissions = [
   // System
   { name: "logs:read", description: "View audit logs" },
   { name: "settings:manage", description: "Manage system settings" },
+  { name: "settings:password-policy", description: "Manage password policy settings" },
+  { name: "settings:chat-policy", description: "Manage chat policy settings" },
 ];
 
 async function main() {

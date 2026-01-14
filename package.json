@@ -8,6 +8,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "realtime": "turbo run dev --filter=@repo/realtime",
+    "desktop": "turbo run dev --filter=desktop",
+    "package": "turbo run package --filter=desktop",
+    "dev:all": "turbo run dev",
     "db:generate": "turbo run db:generate",
     "setup": "npm install && docker-compose up -d && turbo run db:generate"
   },

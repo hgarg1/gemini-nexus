@@ -9,12 +9,28 @@ import { Redis } from "ioredis";
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
 
-export const transmissionQueue = new Queue("transmission-queue", { connection });
+export const transmissionQueue = new Queue("transmission-queue", { connection: connection as any });
 
 export function setupWorker(io: Server) {
   const worker = new Worker(
     "transmission-queue",
     async (job) => {
+      if (job.name === "org-asset-update") {
+        const { orgId, logo, banner } = job.data;
+        const data: any = {};
+        if (logo !== undefined) data.logo = logo;
+        if (banner !== undefined) data.banner = banner;
+        
+        if (Object.keys(data).length > 0) {
+          await prisma.organization.update({
+            where: { id: orgId },
+            data
+          });
+          console.log(`>> ORG_ASSET_UPDATED: ${orgId}`);
+        }
+        return "ASSETS_PERSISTED";
+      }
+
       const { prompt, chatId, history, config, apiKey, modelMessageId, images, image, userMessageId, branchId } = job.data;
       const imageList = Array.isArray(images) ? images : image ? [image] : [];
 
@@ -226,7 +242,7 @@ export function setupWorker(io: Server) {
         throw error;
       }
     },
-    { connection }
+    { connection: connection as any }
   );
 
   worker.on("completed", (job) => {

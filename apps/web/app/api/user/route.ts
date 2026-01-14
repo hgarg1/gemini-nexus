@@ -19,6 +19,24 @@ export async function GET() {
       email: true,
       phone: true,
       image: true,
+      activeOrgId: true,
+      notificationSettings: true,
+      memberships: {
+        select: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              logo: true,
+              banner: true,
+            },
+          },
+          role: { select: { name: true } },
+          joinedAt: true,
+        },
+        orderBy: { joinedAt: "desc" },
+      },
     },
   });
 
@@ -37,6 +55,11 @@ export async function PATCH(req: Request) {
     const email = typeof body.email === "string" ? body.email.trim() : undefined;
     const phoneRaw = typeof body.phone === "string" ? body.phone.trim() : undefined;
     const image = typeof body.image === "string" ? body.image : body.image === null ? null : undefined;
+    const activeOrgId = typeof body.activeOrgId === "string" ? body.activeOrgId : body.activeOrgId === null ? null : undefined;
+    const notificationSettings =
+      typeof body.notificationSettings === "object" && body.notificationSettings !== null
+        ? body.notificationSettings
+        : undefined;
 
     if (name !== undefined && name.length < 2) {
       return NextResponse.json({ error: "Name must be at least 2 characters" }, { status: 400 });
@@ -65,12 +88,28 @@ export async function PATCH(req: Request) {
       email?: string;
       phone?: string | null;
       image?: string | null;
+      activeOrgId?: string | null;
+      notificationSettings?: any;
     } = {};
 
     if (name !== undefined) data.name = name;
     if (email !== undefined) data.email = email;
     if (phoneRaw !== undefined) data.phone = phoneRaw.length ? phoneRaw : null;
     if (image !== undefined) data.image = image;
+    if (notificationSettings !== undefined) data.notificationSettings = notificationSettings;
+
+    if (activeOrgId !== undefined) {
+      if (activeOrgId) {
+        const membership = await prisma.organizationMember.findUnique({
+          where: { organizationId_userId: { organizationId: activeOrgId, userId } },
+          select: { id: true },
+        });
+        if (!membership) {
+          return NextResponse.json({ error: "Invalid organization selection" }, { status: 400 });
+        }
+      }
+      data.activeOrgId = activeOrgId;
+    }
 
     const user = await prisma.user.update({
       where: { id: userId },
@@ -81,6 +120,8 @@ export async function PATCH(req: Request) {
         email: true,
         phone: true,
         image: true,
+        activeOrgId: true,
+        notificationSettings: true,
       },
     });
 

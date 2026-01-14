@@ -2,6 +2,7 @@ import { prisma } from "@repo/database";
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { registerSchema } from "@/lib/validations";
+import { resolvePasswordPolicy, validatePasswordWithPolicy } from "@/lib/password-policy";
 
 export async function POST(req: Request) {
   try {
@@ -16,6 +17,15 @@ export async function POST(req: Request) {
     }
 
     const { email, password, name } = result.data;
+
+    const policySetting = await prisma.systemSettings.findUnique({
+      where: { key: "password_policy" },
+    });
+    const policy = resolvePasswordPolicy(policySetting?.value);
+    const policyError = validatePasswordWithPolicy(password, policy);
+    if (policyError) {
+      return NextResponse.json({ error: policyError }, { status: 400 });
+    }
 
     const existingUser = await prisma.user.findUnique({
       where: { email },

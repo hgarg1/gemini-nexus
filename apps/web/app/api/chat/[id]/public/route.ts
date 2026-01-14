@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@repo/database";
+import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
 export async function PATCH(
   req: NextRequest,
@@ -23,6 +24,11 @@ export async function PATCH(
 
     if (!chat || chat.userId !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { policy } = await getEffectiveChatPolicy(userId);
+    if (!policy.allowPublicLinks) {
+      return NextResponse.json({ error: "Public links disabled by policy" }, { status: 403 });
     }
 
     const updatedChat = await prisma.chat.update({

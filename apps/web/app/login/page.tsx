@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Terminal, Shield, ArrowRight, Github, Mail, Lock, Key } from "lucide-react";
 import Link from "next/link";
@@ -10,7 +10,7 @@ import { loginSchema } from "@/lib/validations";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { cn } from "../../lib/utils";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -19,6 +19,8 @@ export default function LoginPage() {
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") || "/chat";
 
   const validate = () => {
     const result = loginSchema.safeParse(formData);
@@ -50,7 +52,7 @@ export default function LoginPage() {
       if (result?.error) {
         setServerError("AUTHENTICATION_FAILED: INVALID_CREDENTIALS");
       } else {
-        router.push("/chat");
+        router.push(callbackUrl);
         router.refresh();
       }
     } catch (err) {
@@ -94,7 +96,7 @@ export default function LoginPage() {
         // We'll show a success state.
         setServerError("PASSKEY_VERIFIED... REDIRECTING");
         setTimeout(() => {
-           router.push("/chat");
+           router.push(callbackUrl);
         }, 1000);
       } else {
         throw new Error("Verification failed");
@@ -220,7 +222,7 @@ export default function LoginPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <button 
-              onClick={() => signIn("google", { callbackUrl: "/chat" })}
+              onClick={() => signIn("google", { callbackUrl })}
               className="py-4 px-4 glass-panel rounded-2xl flex items-center justify-center gap-3 hover:bg-white/5 transition-all text-xs font-bold border-white/5 hover:border-white/10"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -238,10 +240,18 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-10 text-center text-white/30 text-[10px] font-bold tracking-[0.3em] uppercase">
-            NEW AGENT? <Link href="/register" className="text-primary hover:text-primary/80 transition-colors">REGISTER_ENTITY</Link>
+            NEW AGENT? <Link href={`/register?callbackUrl=${encodeURIComponent(callbackUrl)}`} className="text-primary hover:text-primary/80 transition-colors">REGISTER_ENTITY</Link>
           </p>
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-primary">LOADING_INTERFACE...</div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

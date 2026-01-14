@@ -4,6 +4,7 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, Shield, Cpu } from "lucide-react";
 import { ConfigGroup, ConfigSlider } from "./ui/config-components";
+import { cn } from "@/lib/utils";
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -16,9 +17,10 @@ interface SettingsPanelProps {
     modelName: string;
   };
   setConfig: (config: any) => void;
+  allowCustomApiKey?: boolean;
 }
 
-export function SettingsPanel({ isOpen, onClose, config, setConfig }: SettingsPanelProps) {
+export function SettingsPanel({ isOpen, onClose, config, setConfig, allowCustomApiKey = true }: SettingsPanelProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -85,7 +87,11 @@ export function SettingsPanel({ isOpen, onClose, config, setConfig }: SettingsPa
                       placeholder="ENTER_PRIVATE_KEY..."
                       value={config.customKey}
                       onChange={(e) => setConfig({ ...config, customKey: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm focus:border-primary/50 outline-none transition-all pr-12"
+                      disabled={!allowCustomApiKey}
+                      className={cn(
+                        "w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm outline-none transition-all pr-12",
+                        allowCustomApiKey ? "focus:border-primary/50" : "opacity-50 cursor-not-allowed"
+                      )}
                     />
                     <Shield className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-primary transition-colors" />
                   </div>

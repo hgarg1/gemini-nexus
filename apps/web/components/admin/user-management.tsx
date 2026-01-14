@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, 
@@ -26,12 +26,14 @@ import {
   ChevronRight,
   Info,
   KeyRound,
-  Building2
+  Building2,
+  Eye
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ValidatedInput } from "../ui/validated-input";
 import { CustomSelect } from "../ui/custom-select";
+import { buildPasswordRequirements, defaultPasswordPolicy, validatePasswordWithPolicy } from "@/lib/password-policy";
 
 interface UserManagementProps {
   initialUsers: any[];
@@ -54,11 +56,16 @@ export function UserManagement({ initialUsers, availableRoles }: UserManagementP
     password: "",
     roleId: availableRoles.find(r => r.name === "User")?.id || "",
   });
+  const [passwordPolicy, setPasswordPolicy] = useState(defaultPasswordPolicy);
   const router = useRouter();
 
   const roleOptions = useMemo(() => 
     availableRoles.map(r => ({ label: r.name.toUpperCase(), value: r.id })),
     [availableRoles]
+  );
+  const passwordRequirements = useMemo(
+    () => buildPasswordRequirements(passwordPolicy, createFormData.password),
+    [passwordPolicy, createFormData.password]
   );
 
   const validateEmail = (val: string) => {
@@ -73,11 +80,22 @@ export function UserManagement({ initialUsers, availableRoles }: UserManagementP
     return null;
   };
 
-  const validatePassword = (val: string) => {
-    if (!val) return "Access key required";
-    if (val.length < 8) return "Key entropy too low (min 8 chars)";
-    return null;
-  };
+  const validatePassword = (val: string) => validatePasswordWithPolicy(val, passwordPolicy);
+
+  useEffect(() => {
+    const loadPolicy = async () => {
+      try {
+        const res = await fetch("/api/password-policy");
+        const data = await res.json();
+        if (res.ok && data.policy) {
+          setPasswordPolicy(data.policy);
+        }
+      } catch (err) {
+        console.error("Failed to load password policy");
+      }
+    };
+    loadPolicy();
+  }, []);
 
   const fetchEffectivePerms = async (userId: string) => {
     setIsPermModalLoading(true);
@@ -350,6 +368,36 @@ export function UserManagement({ initialUsers, availableRoles }: UserManagementP
                         icon={<Network className="text-primary" />}
                         label="MAP_PERMISSIONS"
                         />
+                        <ActionButton 
+                        onClick={async () => {
+                            try {
+                                await fetch(`/api/admin/users/${selectedUser.id}/blocking`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ canBlockOthers: !selectedUser.canBlockOthers }),
+                                });
+                                setUsers((prev: any[]) => prev.map(u => u.id === selectedUser.id ? { ...u, canBlockOthers: !u.canBlockOthers } : u));
+                                setSelectedUser((prev: any) => prev ? { ...prev, canBlockOthers: !prev.canBlockOthers } : null);
+                            } catch (e) { console.error(e); }
+                        }}
+                        icon={<ShieldCheck className={selectedUser.canBlockOthers ? "text-green-500" : "text-white/40"} />}
+                        label={selectedUser.canBlockOthers ? "BLOCKING_ENABLED" : "BLOCKING_DISABLED"}
+                        />
+                        <ActionButton 
+                        onClick={async () => {
+                            try {
+                                await fetch(`/api/admin/users/${selectedUser.id}/blocking`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ canViewBlockLogs: !selectedUser.canViewBlockLogs }),
+                                });
+                                setUsers((prev: any[]) => prev.map(u => u.id === selectedUser.id ? { ...u, canViewBlockLogs: !u.canViewBlockLogs } : u));
+                                setSelectedUser((prev: any) => prev ? { ...prev, canViewBlockLogs: !prev.canViewBlockLogs } : null);
+                            } catch (e) { console.error(e); }
+                        }}
+                        icon={<Eye className={selectedUser.canViewBlockLogs ? "text-green-500" : "text-white/40"} />}
+                        label={selectedUser.canViewBlockLogs ? "LOGS_VISIBLE" : "LOGS_HIDDEN"}
+                        />
                     </div>
                   </div>
                 </Section>
@@ -530,6 +578,24 @@ export function UserManagement({ initialUsers, availableRoles }: UserManagementP
                     validate={validatePassword}
                     placeholder="••••••••" 
                 />
+                <div className="grid grid-cols-2 gap-2 px-1">
+                  {passwordRequirements.map((req) => (
+                    <div key={req.label} className="flex items-center gap-2">
+                      <div className={cn(
+                        "w-3 h-3 rounded flex items-center justify-center border transition-all duration-300",
+                        req.valid ? "bg-primary border-primary" : "bg-white/5 border-white/10"
+                      )}>
+                        {req.valid && <CheckCircle className="w-2 h-2 text-black" />}
+                      </div>
+                      <span className={cn(
+                        "text-[9px] font-black tracking-tight transition-colors duration-300",
+                        req.valid ? "text-primary" : "text-white/20"
+                      )}>
+                        {req.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
                 <CustomSelect 
                     label="INITIAL_ACCESS_LEVEL"
                     value={createFormData.roleId}
@@ -596,3 +662,4 @@ function InfoRow({ icon, label, value, color = "text-white" }: any) {
     </div>
   );
 }
+

@@ -32,6 +32,30 @@ export async function POST(
   const { label, roleId, requiresApproval, maxUses, expiresAt, isPrimary } = await req.json();
 
   const link = await prisma.$transaction(async (tx) => {
+    let resolvedRoleId = roleId;
+    if (isPrimary && !resolvedRoleId) {
+      const org = await tx.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true, slug: true }
+      });
+      if (org) {
+        const roleName = `Org Admin - ${org.name}`;
+        const existingRole = await tx.role.findUnique({ where: { name: roleName } });
+        if (existingRole) {
+          resolvedRoleId = existingRole.id;
+        } else {
+          const createdRole = await tx.role.create({
+            data: {
+              name: roleName,
+              description: `Org admin for ${org.name}`,
+              organizationId
+            }
+          });
+          resolvedRoleId = createdRole.id;
+        }
+      }
+    }
+
     if (isPrimary) {
       await tx.organizationLink.updateMany({
         where: { organizationId, isPrimary: true },
@@ -42,7 +66,7 @@ export async function POST(
       data: {
         organizationId,
         label,
-        roleId,
+        roleId: resolvedRoleId,
         requiresApproval: requiresApproval ?? true,
         maxUses,
         expiresAt: expiresAt ? new Date(expiresAt) : null,

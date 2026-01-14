@@ -17,7 +17,9 @@ import {
   ShieldCheck,
   Building2,
   Menu,
-  X
+  X,
+  Shield,
+  Bot
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +36,8 @@ export function AdminSidebar() {
     { href: "/admin/users", icon: <Users />, label: "OPERATIVES" },
     { href: "/admin/roles", icon: <ShieldCheck />, label: "ACCESS_PROTOCOLS" },
     { href: "/admin/organizations", icon: <Building2 />, label: "ORGANIZATIONS" },
+    { href: "/admin/bots", icon: <Bot />, label: "GLOBAL_BOTS" },
+    { href: "/admin/controls/chat", icon: <MessageSquare />, label: "CHAT_PROTOCOLS" },
     { href: "/admin/logs", icon: <ScrollText />, label: "AUDIT_LOGS" },
     { href: "/admin/settings", icon: <Settings />, label: "SYSTEM_CORE" },
   ];

@@ -20,7 +20,14 @@ export async function GET(
       include: {
         messages: {
           orderBy: { createdAt: "asc" },
-          include: { assets: true }
+          include: { 
+            assets: true,
+            reactions: {
+              include: {
+                user: { select: { id: true, name: true } }
+              }
+            }
+          }
         },
         assets: true,
         collaborators: true,

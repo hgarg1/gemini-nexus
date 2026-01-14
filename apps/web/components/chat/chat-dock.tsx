@@ -18,9 +18,7 @@ import { SidebarNavIcon } from "./ui/sidebar-nav-icon";
 
 interface ChatDockProps {
   activeTab: string;
-  onTabChange: (tab: "chat" | "grid" | "users" | "assets" | "memory" | "version") => void;
-  isShareOpen: boolean;
-  onShare: () => void;
+  onTabChange: (tab: "chat" | "grid" | "users" | "assets" | "memory" | "version" | "collab") => void;
   isSettingsOpen: boolean;
   onToggleSettings: () => void;
   isInfoOpen: boolean;
@@ -32,8 +30,6 @@ interface ChatDockProps {
 export function ChatDock({
   activeTab,
   onTabChange,
-  isShareOpen,
-  onShare,
   isSettingsOpen,
   onToggleSettings,
   isInfoOpen,
@@ -48,7 +44,7 @@ export function ChatDock({
       <div className="w-10 h-10 bg-primary/20 rounded-xl hidden md:flex items-center justify-center border border-primary/40 mb-10">
         <TerminalIcon className="text-primary w-5 h-5" />
       </div>
-      <div className="flex-1 flex md:flex-col flex-row gap-4 md:gap-6 items-center justify-around">
+      <div className="flex-1 flex md:flex-col flex-row gap-4 md:gap-6 items-center justify-start md:justify-around overflow-x-auto md:overflow-visible w-full md:w-auto px-2 md:px-0 scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
         <SidebarNavIcon
           icon={<MessageSquare />}
           active={activeTab === "chat"}
@@ -78,12 +74,15 @@ export function ChatDock({
           active={activeTab === "grid"}
           onClick={() => {
             onTabChange("grid");
+            /* 
+            // Removed temporary error for implementation
             onShowError(
-              "DASHBOARD_ACCESS",
-              "Neural Grid view is currently undergoing optimization. Performance metrics will be available in the next release."
+              "NEXUS_ACCESS",
+              "Nexus Hub is initializing. Access will be granted shortly."
             );
+            */
           }}
-          tooltip="DASHBOARD"
+          tooltip="NEXUS HUB"
         />
         {isAdmin && (
           <SidebarNavIcon
@@ -95,8 +94,8 @@ export function ChatDock({
         )}
         <SidebarNavIcon 
           icon={<Users />} 
-          active={isShareOpen} 
-          onClick={onShare} 
+          active={activeTab === "collab"} 
+          onClick={() => onTabChange("collab")} 
           tooltip="COLLABORATE"
         />
       </div>

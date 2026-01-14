@@ -115,3 +115,26 @@ export const generateGeminiResponse = async (
   const response = await result.response;
   return response.text();
 };
+
+export const generateEmbedding = async (text: string, apiKey?: string) => {
+  const genAI = new GoogleGenerativeAI(apiKey || process.env.GEMINI_API_KEY!);
+  const model = genAI.getGenerativeModel({ model: "embedding-001" });
+  
+  const result = await model.embedContent(text);
+  return result.embedding.values;
+};
+
+export const cosineSimilarity = (vecA: number[], vecB: number[]) => {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  const len = Math.min(vecA.length, vecB.length);
+  for (let i = 0; i < len; i++) {
+    const valA = vecA[i] ?? 0;
+    const valB = vecB[i] ?? 0;
+    dotProduct += valA * valB;
+    normA += valA * valA;
+    normB += valB * valB;
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+};

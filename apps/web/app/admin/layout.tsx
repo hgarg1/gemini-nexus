@@ -4,6 +4,12 @@ import { redirect } from "next/navigation";
 import { prisma } from "@repo/database";
 import { AdminSidebar } from "@/components/admin/sidebar";
 import { AdminAIChatbot } from "@/components/admin/ai-chatbot";
+import { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Nexus Admin | Security Portal",
+  manifest: "/manifest-admin.json",
+};
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);

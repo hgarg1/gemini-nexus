@@ -1,0 +1,21 @@
+{
+  "name": "Nexus Core",
+  "short_name": "Nexus",
+  "description": "Advanced AI Collaboration Hub",
+  "start_url": "/chat",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#00f2ff",
+  "icons": [
+    {
+      "src": "/icons/user-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/user-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

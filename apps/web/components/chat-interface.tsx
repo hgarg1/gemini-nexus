@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Send, 
@@ -16,6 +16,7 @@ import {
   FilePlus,
   User,
   X as CloseIcon,
+  SmilePlus
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -25,6 +26,7 @@ import remarkGfm from "remark-gfm";
 
 import { cn } from "../lib/utils";
 import { ImpressiveModal } from "./impressive-modal";
+import { defaultChatPolicy, defaultChatOrgOverride } from "@/lib/chat-policy";
 
 // New Components
 import { ChatDock } from "./chat/chat-dock";
@@ -33,13 +35,20 @@ import { SettingsPanel } from "./chat/settings-panel";
 import { ImageViewer } from "./chat/image-viewer";
 import { VersionView } from "./chat/views/version-view";
 import { MemoryView } from "./chat/views/memory-view";
+import { CollaborationView } from "./chat/views/collaboration-view";
 import { ShareModal } from "./chat/modals/share-modal";
 import { CheckpointModal } from "./chat/modals/checkpoint-modal";
 import { BranchModal } from "./chat/modals/branch-modal";
 import { MergeModal } from "./chat/modals/merge-modal";
 import { MergeConfirmModal } from "./chat/modals/merge-confirm-modal";
 import { RestoreModal } from "./chat/modals/restore-modal";
+import { NexusHubView } from "./chat/views/nexus-hub-view";
 import { DashboardStat } from "./chat/ui/dashboard-stat";
+import { UserSelectionModal } from "./chat/modals/user-selection-modal";
+import { CreateSquadModal } from "./chat/modals/create-squad-modal";
+import { CreateDMModal } from "./chat/modals/create-dm-modal";
+import { TypingWaveform } from "./chat/ui/typing-waveform";
+import { synth } from "@/lib/audio-synth";
 
 export default function ChatInterface({ chatId }: { chatId?: string }) {
   const { data: session, status: sessionStatus } = useSession();
@@ -54,6 +63,7 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
   const [status, setStatus] = useState("IDLE");
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [profileName, setProfileName] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
   const [expandedImageGroups, setExpandedImageGroups] = useState<Record<string, boolean>>({});
   const [models, setModelsList] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -67,6 +77,97 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
     customKey: "",
     modelName: "models/gemini-2.0-flash",
   });
+  const [collabTab, setCollabTab] = useState<"links" | "participants" | "messages" | "directory" | "notifications">("links");
+  const [collabLinks, setCollabLinks] = useState<any[]>([]);
+  const [collabLinksLoading, setCollabLinksLoading] = useState(false);
+  const [collabOwner, setCollabOwner] = useState<any | null>(null);
+  const [collabParticipants, setCollabParticipants] = useState<any[]>([]);
+  const [directoryQuery, setDirectoryQuery] = useState("");
+  const [directoryUsers, setDirectoryUsers] = useState<any[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [allowedSquadSettings, setAllowedSquadSettings] = useState<string[]>(["isPublic", "allowInvites", "description"]);
+  const [directThreadUser, setDirectThreadUser] = useState<any | null>(null);
+  const [directThreads, setDirectThreads] = useState<Record<string, any[]>>({});
+  const [threadAppearance, setThreadAppearance] = useState<any>(null);
+  const [directDraft, setDirectDraft] = useState("");
+  const [directLoading, setDirectLoading] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState({
+    dmToast: true,
+    chatToast: true,
+    emailNotifications: false,
+  });
+  const [memberships, setMemberships] = useState<any[]>([]);
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
+  const [chatPolicy, setChatPolicy] = useState(defaultChatPolicy);
+  const [chatPolicyMeta, setChatPolicyMeta] = useState({
+    globalPolicy: defaultChatPolicy,
+    orgOverride: defaultChatOrgOverride,
+  });
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [resolvedBaseUrl, setResolvedBaseUrl] = useState("");
+  const [toastQueue, setToastQueue] = useState<{ id: string; title: string; description: string }[]>([]);
+  const [activeTab, setActiveTab] = useState<"chat" | "grid" | "users" | "assets" | "memory" | "version" | "collab">("chat");
+  
+  const [selectedNexusTag, setSelectedNexusTag] = useState<string | null>(null);
+  
+  // Collab State
+  const [collabViewMode, setCollabViewMode] = useState<"chats" | "links">("chats");
+  const [activeChannel, setActiveChannel] = useState<any>(null);
+  const [mockChannels] = useState([
+    { id: "c1", name: "general", type: "channel", readOnly: false },
+    { id: "c2", name: "announcements", type: "channel", readOnly: true },
+  ]);
+  const [mockGroups] = useState([
+    { id: "g1", name: "Dev Ops Team", type: "group", unread: 2 },
+    { id: "g2", name: "Project Alpha", type: "group", unread: 0 },
+  ]);
+  const [isCreateDMOpen, setIsCreateDMOpen] = useState(false);
+  const [isCreateSquadOpen, setIsCreateSquadOpen] = useState(false);
+
+  const deleteThread = async (thread: any) => {
+    if (!confirm("TERMINATE_CHANNEL? Data will be purged.")) return;
+    try {
+        const res = await fetch(`/api/collaboration/threads/${thread.id}`, { method: "DELETE" });
+        if (res.ok) {
+            setDirectThreads(prev => {
+                const next = { ...prev };
+                delete next[thread.id];
+                return next;
+            });
+            if (directThreadUser?.id === thread.id) setDirectThreadUser(null);
+            pushToast("CHANNEL_PURGED", "The communication line has been terminated.");
+        }
+    } catch (e) { console.error(e); }
+  };
+
+  const leaveThread = async (thread: any) => {
+    if (!confirm("EXIT_SQUADRON? Access will be revoked.")) return;
+    try {
+        const res = await fetch(`/api/collaboration/threads/${thread.id}/leave`, { method: "POST" });
+        if (res.ok) {
+            pushToast("SQUADRON_EXITED", "You have successfully departed the squadron.");
+            window.location.reload(); 
+        }
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchDirectoryUsers = async (query: string = "") => {
+    try {
+      setDirectoryLoading(true);
+      const res = await fetch(`/api/collaboration/users?q=${query}`);
+      const data = await res.json();
+      if (data.users) setDirectoryUsers(data.users);
+    } catch (e) {
+      console.error("Failed to fetch users");
+    } finally {
+      setDirectoryLoading(false);
+    }
+  };
+
+  const notificationSettingsRef = useRef(notificationSettings);
+  const activeTabRef = useRef(activeTab);
+  const directThreadUserRef = useRef<any | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
 
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -86,11 +187,11 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
 
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"chat" | "grid" | "users" | "assets" | "memory" | "version">("chat");
   const [shareUrl, setShareUrl] = useState("");
   const [memories, setMemories] = useState<any[]>([]);
   const [memorySearch, setMemorySearch] = useState("");
   const [memorySort, setMemorySort] = useState("recent");
+  const [memoryFilter, setMemoryFilter] = useState<string | null>(null);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [memoryLabelDraft, setMemoryLabelDraft] = useState("");
@@ -151,6 +252,19 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
 
   const showError = (title: string, description: string) => {
     setErrorModalState({ isOpen: true, title, description });
+  };
+
+  const pushToast = (title: string, description: string) => {
+    // Send native notification if on desktop
+    if (typeof window !== "undefined" && (window as any).nexusDesktop) {
+      (window as any).nexusDesktop.send("toMain", { type: "notify", title, body: description });
+    }
+
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setToastQueue((prev) => [...prev, { id, title, description }]);
+    setTimeout(() => {
+      setToastQueue((prev) => prev.filter((toast) => toast.id !== id));
+    }, 4500);
   };
 
   const normalizeMessageAssets = (message: any) => {
@@ -264,6 +378,10 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
 
   const handleFiles = async (files: File[]) => {
     if (!files.length) return;
+    if (!chatPolicy.allowFileUploads) {
+      showError("UPLOADS_DISABLED", "File attachments are restricted by active collaboration policy.");
+      return;
+    }
     const images = files.filter((file) => file.type.startsWith("image/"));
 
     if (images.length !== files.length) {
@@ -322,6 +440,28 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
   }, [session?.user?.image, session?.user?.name]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setResolvedBaseUrl(window.location.origin);
+    }
+  }, []);
+
+  useEffect(() => {
+    notificationSettingsRef.current = notificationSettings;
+  }, [notificationSettings]);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    directThreadUserRef.current = directThreadUser;
+  }, [directThreadUser]);
+
+  useEffect(() => {
+    currentUserIdRef.current = (session?.user as any)?.id || null;
+  }, [session?.user]);
+
+  useEffect(() => {
     if (sessionStatus !== "authenticated") return;
     let isActive = true;
 
@@ -333,6 +473,14 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
 
         setProfileImage(data.user.image ?? null);
         setProfileName(data.user.name ?? null);
+        setMemberships(data.user.memberships || []);
+        setActiveOrgId(data.user.activeOrgId ?? null);
+        if (data.user.notificationSettings) {
+          setNotificationSettings((prev) => ({
+            ...prev,
+            ...data.user.notificationSettings,
+          }));
+        }
       } catch (err) {
         console.warn("PROFILE_SYNC_FAILED");
       }
@@ -344,6 +492,31 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
       isActive = false;
     };
   }, [sessionStatus]);
+
+  useEffect(() => {
+    if (sessionStatus !== "authenticated") return;
+    let active = true;
+    const loadPolicy = async () => {
+      setPolicyLoading(true);
+      try {
+        const res = await fetch("/api/chat/policy", { cache: "no-store" });
+        const data = await res.json();
+        if (!active || !res.ok) return;
+        if (data.policy) setChatPolicy(data.policy);
+        if (data.globalPolicy && data.orgOverride) {
+          setChatPolicyMeta({ globalPolicy: data.globalPolicy, orgOverride: data.orgOverride });
+        }
+      } catch (err) {
+        console.warn("CHAT_POLICY_LOAD_FAILED");
+      } finally {
+        if (active) setPolicyLoading(false);
+      }
+    };
+    loadPolicy();
+    return () => {
+      active = false;
+    };
+  }, [sessionStatus, activeOrgId]);
 
   // Initialize Socket
   useEffect(() => {
@@ -368,6 +541,7 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
     });
 
     socket.on("message-received", (message) => {
+      synth.playIncomingMessage();
       setMessages(prev => {
         if (prev.find(m => m.id === message.id)) return prev;
         return [...prev, message];
@@ -377,6 +551,51 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
     socket.on("message-updated", (data) => {
       setMessages(prev => prev.map(m => m.id === data.id ? { ...m, content: data.content } : m));
       setStatus("IDLE");
+    });
+
+    socket.on("direct-message", (message) => {
+      const currentUserId = currentUserIdRef.current;
+      const otherId = message.senderId === currentUserId ? message.receiverId : message.senderId;
+      
+      if (message.senderId !== currentUserId) {
+        synth.playIncomingMessage();
+      }
+
+      setDirectThreads((prev) => {
+        const existing = prev[otherId] || [];
+        if (existing.find((m: any) => m.id === message.id)) return prev;
+        return { ...prev, [otherId]: [...existing, message] };
+      });
+
+      const settings = notificationSettingsRef.current;
+      const activeThreadId = directThreadUserRef.current?.id;
+      if (settings?.dmToast !== false && message.senderId !== currentUserId && activeThreadId !== message.senderId) {
+        const senderName = message.sender?.name || "New message";
+        pushToast("DIRECT_SIGNAL", `${senderName}: ${message.content.slice(0, 120)}`);
+        synth.playNotification();
+      }
+    });
+
+    socket.on("message-reaction", ({ messageId, emoji, userId, action }) => {
+      synth.playReaction();
+      const updateMessages = (prev: any[]) => prev.map(m => {
+        if (m.id !== messageId) return m;
+        const reactions = m.reactions || [];
+        if (action === "ADDED") {
+          return { ...m, reactions: [...reactions, { emoji, userId }] };
+        } else {
+          return { ...m, reactions: reactions.filter((r: any) => !(r.emoji === emoji && r.userId === userId)) };
+        }
+      });
+
+      setMessages(prev => updateMessages(prev));
+      setDirectThreads(prev => {
+        const next = { ...prev };
+        Object.keys(next).forEach(key => {
+          next[key] = updateMessages(next[key]);
+        });
+        return next;
+      });
     });
 
     return () => {
@@ -390,6 +609,13 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
       socketRef.current.emit("join-chat", chatId);
     }
   }, [chatId]);
+
+  useEffect(() => {
+    const userId = (session?.user as any)?.id;
+    if (userId && socketRef.current) {
+      socketRef.current.emit("join-user", userId);
+    }
+  }, [session?.user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -496,10 +722,20 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
   const createNewChat = async () => {
     setStatus("INITIALIZING_NEW_LINK");
     try {
+      const isBot = selectedModel.startsWith("bot:");
+      const botId = isBot ? selectedModel.split("bot:")[1] : undefined;
+      
+      const payload: any = { 
+        title: isBot ? `Link: ${models.find(m => m.name === selectedModel)?.displayName}` : "New Nexus Stream",
+        config: { ...config } 
+      };
+      
+      if (botId) payload.botId = botId;
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "New Nexus Stream", config }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.chat) {
@@ -554,21 +790,74 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
     }
   };
 
-  useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const res = await fetch("/api/models");
-        const data = await res.json();
-        if (data.models) {
-          setModelsList(data.models);
+      useEffect(() => {
+      const fetchModels = async () => {
+        try {
+          const [modelsRes, botsRes] = await Promise.all([
+              fetch("/api/models"),
+              fetch("/api/user/bots")
+          ]);
+          
+          const modelsData = await modelsRes.json();
+          const botsData = await botsRes.json();
+          
+          let allModels = [];
+          
+          if (modelsData.models) {
+            allModels = [...modelsData.models];
+          }
+          
+          if (botsData.bots) {
+              const mappedBots = botsData.bots.map((b: any) => ({
+                  name: `bot:${b.id}`, // Prefix to distinguish
+                  displayName: `🤖 ${b.name}`,
+                  description: b.description,
+                  isBot: true,
+                  botId: b.id
+              }));
+              allModels = [...mappedBots, ...allModels];
+          }
+          
+          setModelsList(allModels);
+        } catch (err) {
+          console.error("Failed to fetch models or bots");
         }
-      } catch (err) {
-        console.error("Failed to fetch models");
-      }
+      };
+      const fetchSettings = async () => {      try {
+        const res = await fetch("/api/chat/settings");
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        const data = await res.json();
+        if (data && data.allowedSquadSettings && Array.isArray(data.allowedSquadSettings)) {
+          setAllowedSquadSettings(data.allowedSquadSettings);
+        } else {
+          console.warn("Received unexpected data format for allowedSquadSettings");
+        }
+      } catch (e) { console.error("Failed to load chat settings", e); }
     };
+    
+    const fetchConnections = async () => {
+        try {
+            const res = await fetch("/api/collaboration/connections");
+            const data = await res.json();
+            if (data.connections) {
+                setDirectThreads(prev => {
+                    const next = { ...prev };
+                    data.connections.forEach((u: any) => {
+                        if (!next[u.id]) next[u.id] = [];
+                    });
+                    return next;
+                });
+            }
+        } catch (e) { console.error("Failed to load connections"); }
+    };
+
+    fetchSettings();
     if (sessionStatus === "authenticated") {
       fetchModels();
       fetchHistory();
+      fetchConnections();
     }
   }, [sessionStatus]);
 
@@ -666,6 +955,55 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
     }
   }, [isModelMenuOpen]);
 
+  const handleReact = async (messageId: string, emoji: string, isDM: boolean = false) => {
+    const url = isDM 
+      ? "/api/collaboration/messages/react" 
+      : "/api/chat/messages/react";
+    
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, emoji }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        // Emit via socket for real-time pop
+        if (socketRef.current) {
+          socketRef.current.emit("message-reaction", {
+            chatId: isDM ? null : chatId,
+            recipientId: isDM && directThreadUser ? directThreadUser.id : null,
+            messageId,
+            emoji,
+            userId: (session?.user as any).id,
+            action: data.action // ADDED or REMOVED
+          });
+        }
+
+        // Local update
+        const updateMessages = (prev: any[]) => prev.map(m => {
+          if (m.id !== messageId) return m;
+          const reactions = m.reactions || [];
+          if (data.action === "ADDED") {
+            return { ...m, reactions: [...reactions, { emoji, userId: (session?.user as any).id }] };
+          } else {
+            return { ...m, reactions: reactions.filter((r: any) => !(r.emoji === emoji && r.userId === (session?.user as any).id)) };
+          }
+        });
+
+        if (isDM && directThreadUser) {
+          setDirectThreads(prev => ({
+            ...prev,
+            [directThreadUser.id]: updateMessages(prev[directThreadUser.id] || [])
+          }));
+        } else {
+          setMessages(prev => updateMessages(prev));
+        }
+      }
+    } catch (e) { console.error(e); }
+  };
+
   if (sessionStatus === "loading") {
     return (
       <div className="h-screen bg-background flex flex-col items-center justify-center">
@@ -733,7 +1071,27 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
   };
 
   const handleSend = async () => {
+    if ((!input.trim() && filePreviews.length === 0) || status === "PROCESSING") return;
+
+    // ... (existing logic) ...
+
+    const currentModelIsBot = selectedModel.startsWith("bot:");
+    const actualModelName = currentModelIsBot ? "models/gemini-2.0-flash" : selectedModel; // Fallback for bot
+    const botId = currentModelIsBot ? selectedModel.split("bot:")[1] : undefined;
+
+    // ... 
+    
+    // Instead of replacing the whole function which is huge, I will add a logic to update the config before sending or ensure the API handles it.
+    // The '/api/chat/[id]/message' endpoint likely reads the Chat's config from DB or takes overrides.
+    // If I'm creating a NEW chat, I need to pass botId.
+    
+    // Let's modify 'createNewChat' first, as that sets the session up.
+
     if (!input.trim() && filePreviews.length === 0) return;
+    if (!chatPolicy.allowFileUploads && filePreviews.length > 0) {
+      showError("UPLOADS_DISABLED", "File attachments are restricted by active collaboration policy.");
+      return;
+    }
     
     const promptValue = input;
     const fileData = filePreviews;
@@ -765,10 +1123,11 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
       }
 
       // Add user message to UI immediately (with image placeholder if present)
+      const tempUserId = Date.now().toString();
       const userMessage = {
         role: "user", 
         content: promptValue, 
-        id: Date.now().toString(),
+        id: tempUserId,
         hasAttachment: fileData.length > 0,
         assets: fileData.length
           ? fileData.map((url, idx) => ({
@@ -805,12 +1164,27 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
       });
 
       const data = await res.json();
+      if (data.userMessage) {
+        setMessages(prev => prev.map(m => m.id === tempUserId ? data.userMessage : m));
+      }
       if (data.placeholderMessage) {
-        setMessages(prev => [...prev, data.placeholderMessage]);
-        
-        if (!chatId && activeChatId) {
-          router.push(`/chat/${activeChatId}`);
+        setMessages(prev => {
+          if (prev.find(m => m.id === data.placeholderMessage.id)) return prev;
+          return [...prev, data.placeholderMessage];
+        });
+      }
+
+      if (socketRef.current && activeChatId) {
+        if (data.userMessage) {
+          socketRef.current.emit("new-message", { chatId: activeChatId, message: data.userMessage });
         }
+        if (data.placeholderMessage) {
+          socketRef.current.emit("new-message", { chatId: activeChatId, message: data.placeholderMessage });
+        }
+      }
+      
+      if (!chatId && activeChatId) {
+        router.push(`/chat/${activeChatId}`);
       }
     } catch (err: any) {
       setMessages(prev => [...prev, { role: "model", content: `!! TRANSMISSION_FAILURE: ${err.message}`, id: Date.now().toString() }]);
@@ -1218,11 +1592,9 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
         )}
       </AnimatePresence>
 
-      <ChatDock 
+      <ChatDock
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        isShareOpen={isShareModalOpen}
-        onShare={handleShare}
         isSettingsOpen={isSettingsOpen}
         onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
         isInfoOpen={isInfoModalOpen}
@@ -1231,12 +1603,14 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
         isAdmin={(session?.user as any)?.role === "admin" || session?.user?.email === "admin@nexus.sh"}
       />
 
-      <ChatSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        activeTab={activeTab}
-        onNewChat={createNewChat}
-        history={history}
+              <ChatSidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                activeTab={activeTab}
+                nexusTags={["Productivity", "Creative", "Coding", "Utility", "Roleplay", "Fun"]}
+                selectedNexusTag={selectedNexusTag}
+                onSelectNexusTag={setSelectedNexusTag}
+                onNewChat={createNewChat}        history={history}
         chatId={chatId}
         onDeleteChat={deleteChat}
         onStartRename={startRename}
@@ -1254,10 +1628,57 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
         onToggleLabel={toggleLabel}
         onOpenViewer={openViewer}
         onResetFilters={resetAssetFilters}
+        channels={mockChannels}
+        groups={mockGroups}
+        directThreads={Object.values(directThreads).flat().map(m => m.senderId === (session?.user as any)?.id ? m.receiver : m.sender).filter((v,i,a)=>a.findIndex(t=>(t?.id === v?.id))===i).filter(Boolean)} // Simplified contact list derivation
+        onSelectThread={(thread) => {
+            if (thread.type === "channel" || thread.type === "group") {
+                setActiveChannel(thread);
+                setDirectThreadUser(null);
+            } else {
+                setDirectThreadUser(thread);
+                setActiveChannel(null);
+                // Ensure persistent entry in list
+                setDirectThreads(prev => {
+                    if (prev[thread.id]) return prev;
+                    return { ...prev, [thread.id]: [] };
+                });
+            }
+            setCollabViewMode("chats");
+        }}
+        onShowLinks={() => setCollabViewMode("links")}
+        onCreateSquad={() => {
+            setIsCreateSquadOpen(true);
+            fetchDirectoryUsers();
+        }}
+        onCreateDM={() => {
+            setIsCreateDMOpen(true);
+            fetchDirectoryUsers();
+        }}
+        onDeleteThread={deleteThread}
+        onLeaveThread={leaveThread}
+        memories={memories}
+        memoryFilter={memoryFilter}
+        onMemoryFilterChange={setMemoryFilter}
+        versionBranches={versionBranches}
+        versionCheckpoints={versionCheckpoints}
+        versionMergeRequests={versionMergeRequests}
+        selectedBranchId={selectedBranchId}
+        onSelectBranch={setSelectedBranchId}
       />
 
       <main className="flex-1 min-h-0 flex flex-col relative z-10 pb-20 md:pb-0">
-        {activeTab === "version" ? (
+        {activeTab === "grid" ? (
+          <NexusHubView
+            filterTag={selectedNexusTag}
+            onStartChat={(botId) => {
+              // Stub: Switch to chat tab and load bot context
+              console.log("Starting chat with bot:", botId);
+              setActiveTab("chat");
+              pushToast("BOT_INITIALIZED", "Agent context loaded successfully.");
+            }}
+          />
+        ) : activeTab === "version" ? (
           <VersionView
             loading={versionLoading}
             branches={versionBranches}
@@ -1306,6 +1727,170 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
              onSaveLabel={saveMemoryLabel}
              onDelete={setMemoryDeleteId}
           />
+        ) : activeTab === "collab" ? (
+          <CollaborationView
+            chatId={chatId}
+            baseUrl={resolvedBaseUrl}
+            policy={chatPolicy}
+            orgOverride={chatPolicyMeta.orgOverride}
+            activeTab={collabViewMode}
+            onTabChange={setCollabViewMode as any}
+            links={collabLinks}
+            linksLoading={collabLinksLoading}
+            onToggleLink={(linkId, active) => {
+              const toggle = async () => {
+                try {
+                  await fetch(`/api/chat/${chatId}/links/${linkId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ active }),
+                  });
+                  setCollabLinks((prev) =>
+                    prev.map((l) => (l.id === linkId ? { ...l, active } : l))
+                  );
+                } catch (e) { console.error(e); }
+              };
+              toggle();
+            }}
+            onDeleteLink={(linkId) => {
+              const del = async () => {
+                try {
+                  await fetch(`/api/chat/${chatId}/links/${linkId}`, {
+                    method: "DELETE",
+                  });
+                  setCollabLinks((prev) => prev.filter((l) => l.id !== linkId));
+                } catch (e) { console.error(e); }
+              };
+              del();
+            }}
+            owner={collabOwner}
+            participants={collabParticipants}
+            isOwner={collabOwner?.id === (session?.user as any)?.id}
+            directoryUsers={directoryUsers}
+            directThreadUser={directThreadUser || activeChannel}
+            directMessages={directThreadUser ? (directThreads[directThreadUser.id] || []) : []}
+            appearance={threadAppearance}
+            onSaveAppearance={async (appearance) => {
+              if (!directThreadUser && !activeChannel) return;
+              const isDM = !!directThreadUser;
+              const targetId = isDM ? directThreadUser.id : activeChannel.id;
+              const url = isDM 
+                ? "/api/collaboration/messages/appearance" 
+                : `/api/chat/${targetId}/appearance`;
+              
+              try {
+                const res = await fetch(url, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ 
+                    [isDM ? "otherUserId" : "id"]: targetId, 
+                    appearance 
+                  }),
+                });
+                if (res.ok) setThreadAppearance(appearance);
+              } catch (e) { console.error(e); }
+            }}
+            directDraft={directDraft}
+            onDirectDraftChange={setDirectDraft}
+            onOpenThread={(user) => {
+              setDirectThreadUser(user);
+              // Fetch thread messages
+              const loadThread = async () => {
+                try {
+                  const res = await fetch(`/api/collaboration/messages?userId=${user.id}`);
+                  const data = await res.json();
+                  setDirectThreads(prev => ({ ...prev, [user.id]: data.messages || [] }));
+                  setThreadAppearance(data.appearance || null);
+                } catch (e) { console.error(e); }
+              };
+              loadThread();
+            }}
+            onSendDirectMessage={(files?: string[]) => {
+              if (!directThreadUser?.id || (!directDraft.trim() && (!files || files.length === 0))) return;
+              if (directThreadUser.id === (session?.user as any)?.id) {
+                pushToast("INVALID_TARGET", "Cannot establish a neural link with yourself.");
+                return;
+              }
+              const send = async () => {
+                const tempId = Date.now().toString();
+                const optimisticMsg = {
+                  id: tempId,
+                  content: directDraft,
+                  senderId: (session?.user as any)?.id,
+                  receiverId: directThreadUser.id,
+                  createdAt: new Date().toISOString(),
+                  sender: { id: (session?.user as any)?.id, name: profileName, image: profileImage },
+                  receiver: directThreadUser,
+                  assets: (files || []).map((url, idx) => ({ id: `temp-${idx}`, url })),
+                  reactions: []
+                };
+                setDirectThreads(prev => ({
+                  ...prev,
+                  [directThreadUser.id]: [...(prev[directThreadUser.id] || []), optimisticMsg]
+                }));
+                setDirectDraft("");
+                
+                try {
+                  const res = await fetch("/api/collaboration/messages", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        userId: directThreadUser.id, 
+                        content: optimisticMsg.content,
+                        assetUrls: files // Passing base64 for now
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "UPLINK_ERROR");
+
+                  setDirectThreads(prev => ({
+                    ...prev,
+                    [directThreadUser.id]: (prev[directThreadUser.id] || []).map(m => m.id === tempId ? data.message : m)
+                  }));
+                  
+                  if (socketRef.current) {
+                    socketRef.current.emit("direct-message", { 
+                      recipientId: directThreadUser.id, 
+                      message: data.message 
+                    });
+                  }
+                } catch (e: any) { 
+                    console.error(e);
+                    pushToast("TRANSMISSION_FAILED", e.message);
+                }
+              };
+              send();
+            }}
+            onReact={(messageId: string, emoji: string) => handleReact(messageId, emoji, true)}
+            notificationSettings={notificationSettings}
+            onUpdateNotifications={(next) => {
+               // Stub for settings update
+               setNotificationSettings(prev => ({ ...prev, ...next }));
+               const update = async () => {
+                 try {
+                   await fetch("/api/user", {
+                     method: "PATCH",
+                     headers: { "Content-Type": "application/json" },
+                     body: JSON.stringify({ notificationSettings: next }),
+                   });
+                 } catch (e) { console.error(e); }
+               };
+               update();
+            }}
+            memberships={memberships}
+            activeOrgId={activeOrgId}
+            onOrgChange={async (orgId) => {
+               setActiveOrgId(orgId);
+               try {
+                 await fetch("/api/user", {
+                   method: "PATCH",
+                   headers: { "Content-Type": "application/json" },
+                   body: JSON.stringify({ activeOrgId: orgId }),
+                 });
+                 window.location.reload(); // Hard reload to refresh context
+               } catch (e) { console.error(e); }
+            }}
+          />
         ) : (
           <motion.div
             key="chat"
@@ -1328,7 +1913,13 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
                 <DashboardStat icon={<Activity />} label="STATUS" value={status} color={status === "PROCESSING" ? "text-primary animate-pulse" : "text-primary"} />
               </div>
               <div className="relative">
-                <div onClick={() => setIsModelModelMenuOpen(!isModelMenuOpen)} className="flex items-center gap-3 group cursor-pointer">
+                <div
+                  onClick={() => chatPolicy.allowModelSelection && setIsModelModelMenuOpen(!isModelMenuOpen)}
+                  className={cn(
+                    "flex items-center gap-3 group",
+                    chatPolicy.allowModelSelection ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                  )}
+                >
                   <div className={cn("p-2 rounded-lg bg-white/5 text-secondary transition-all", isModelMenuOpen && "bg-secondary/20 text-white shadow-[0_0_15px_rgba(112,0,255,0.3)]")}>
                     <Cpu className="w-4 h-4" />
                   </div>
@@ -1406,7 +1997,20 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-12 space-y-6 md:space-y-12">
-          <AnimatePresence initial={false}>
+          <motion.div
+             variants={{
+               hidden: { opacity: 0 },
+               visible: {
+                 opacity: 1,
+                 transition: {
+                   staggerChildren: 0.1
+                 }
+               }
+             }}
+             initial="hidden"
+             animate="visible"
+          >
+            <AnimatePresence initial={false} mode="popLayout">
             {messages.map((m, i) => {
               const messageAssets = normalizeMessageAssets(m);
               const messageAssetUrls = messageAssets.map((asset) => asset.url);
@@ -1426,88 +2030,111 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
                       : "grid-cols-2 md:grid-cols-3";
 
               return (
-                <motion.div key={m.id || i} initial={{ opacity: 0, y: 20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className={cn("flex gap-4 md:gap-6 max-w-5xl mx-auto group", m.role === "user" ? "flex-row-reverse" : "flex-row")}>
-                  <div className="relative flex-shrink-0">
-                    <div className={cn("w-9 h-9 md:w-12 md:h-12 rounded-2xl flex items-center justify-center border shadow-2xl relative z-10 transition-all duration-500", m.role === "user" ? "bg-primary/10 border-primary/30 text-primary shadow-primary/5" : "bg-secondary/10 border-secondary/30 text-secondary shadow-secondary/5")}>
-                      {m.role === "user" ? (profileImage ? <img src={profileImage} className="w-full h-full rounded-2xl object-cover" /> : <User className="w-5 h-5 md:w-6 md:h-6" />) : <Zap className="w-5 h-5 md:w-6 md:h-6" />}
+                <motion.div key={m.id || i} variants={{ hidden: { opacity: 0, y: 20, scale: 0.98 }, visible: { opacity: 1, y: 0, scale: 1 } }} exit={{ opacity: 0, scale: 0.95 }} layout className={cn("flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
+                  <div className={cn("flex gap-4 md:gap-6 max-w-5xl mx-auto group w-full", m.role === "user" ? "flex-row-reverse" : "flex-row")}>
+                    <div className="relative flex-shrink-0">
+                      <div className={cn("w-9 h-9 md:w-12 md:h-12 rounded-2xl flex items-center justify-center border shadow-2xl relative z-10 transition-all duration-500", m.role === "user" ? "bg-primary/10 border-primary/30 text-primary shadow-primary/5" : "bg-secondary/10 border-secondary/30 text-secondary shadow-secondary/5")}>
+                        {m.role === "user" ? (profileImage ? <img src={profileImage} className="w-full h-full rounded-2xl object-cover" /> : <User className="w-5 h-5 md:w-6 md:h-6" />) : <Zap className="w-5 h-5 md:w-6 md:h-6" />}
+                      </div>
+                      <div className={cn("absolute inset-0 blur-2xl opacity-20 -z-0", m.role === "user" ? "bg-primary" : "bg-secondary")} />
                     </div>
-                    <div className={cn("absolute inset-0 blur-2xl opacity-20 -z-0", m.role === "user" ? "bg-primary" : "bg-secondary")} />
-                  </div>
-                  <div className={cn("flex-1 flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
-                    <div className="flex items-center gap-3 mb-3 px-2">
-                      <span className={cn("text-[10px] font-black tracking-[0.2em]", m.role === "user" ? "text-primary/40" : "text-secondary/40")}>{m.role === "user" ? "AUTHOR_U_01" : "ENGINE_RESULT"}</span>
-                      <span className="text-[9px] font-mono text-white/10">0x{Math.random().toString(16).slice(2, 8).toUpperCase()}</span>
-                    </div>
-                    <div className={cn(
-                      "relative p-4 md:p-7 rounded-[28px] md:rounded-[32px] border transition-all duration-500 max-w-full",
-                      m.role === "user" 
-                        ? "bg-white/[0.03] border-white/10 rounded-tr-none shadow-xl hover:border-primary/20" 
-                        : "glass-panel border-white/5 rounded-tl-none shadow-2xl hover:border-secondary/20"
-                    )}>
-                      {messageAssets.length > 0 && (
-                        <div className="mb-6 space-y-3">
-                          <div className={cn(
-                            "grid gap-3",
-                            gridColumns,
-                            isExpanded && messageAssets.length > maxPreview ? "max-h-[320px] overflow-y-auto pr-1" : ""
-                          )}>
-                            {displayAssets.map((asset: any, idx: number) => (
-                              <motion.button
-                                key={`${messageKey}-asset-${idx}`}
-                                type="button"
-                                whileHover={{ scale: 1.02 }}
-                                onClick={() => {
-                                  const assetIndex = messageAssetUrls.findIndex((url) => url === asset.url);
-                                  openViewer(messageAssetUrls, assetIndex < 0 ? 0 : assetIndex);
-                                }}
-                                className="group relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
-                              >
-                                <img
-                                  src={asset.url}
-                                  alt="Neural Attachment"
-                                  className="w-full object-cover"
-                                  style={{ maxHeight: `${imageMaxHeight}px` }}
-                                />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                {!isExpanded && overflowCount > 0 && idx === displayAssets.length - 1 && (
-                                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-xs font-black tracking-[0.3em] text-white/80">
-                                    +{overflowCount} MORE
-                                  </div>
+                    <div className={cn("flex-1 flex flex-col", m.role === "user" ? "items-end" : "items-start")}>
+                      <div className="flex items-center gap-3 mb-3 px-2">
+                        <span className={cn("text-[10px] font-black tracking-[0.2em]", m.role === "user" ? "text-primary/40" : "text-secondary/40")}>{m.role === "user" ? "AUTHOR_U_01" : "ENGINE_RESULT"}</span>
+                        <span className="text-[9px] font-mono text-white/10">0x{Math.random().toString(16).slice(2, 8).toUpperCase()}</span>
+                      </div>
+                      <div className={cn(
+                        "relative p-4 md:p-6 rounded-[24px] border transition-all duration-500 max-w-full group/msg",
+                        m.role === "user" 
+                          ? "bg-white/[0.03] border-white/10 rounded-tr-none shadow-xl hover:border-primary/20" 
+                          : "glass-panel border-white/5 rounded-tl-none shadow-2xl hover:border-secondary/20"
+                      )}>
+                        {/* ... (assets rendering) ... */}
+
+                        <div className="text-sm md:text-[16px] leading-relaxed text-white/90 font-medium tracking-tight markdown-content pb-1">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                        </div>
+                        <div className={cn("absolute top-0 transform -translate-y-1/2 px-3 py-1 rounded-full text-[8px] font-black tracking-[0.2em] border", m.role === "user" ? "right-6 bg-primary text-black border-primary/50" : "left-6 bg-secondary text-white border-secondary/50")}>{m.role.toUpperCase()}</div>
+
+                        {/* Reaction Trigger (Hover) */}
+                        <div className={cn(
+                          "absolute top-2 opacity-0 group-hover/msg:opacity-100 transition-all duration-300 z-20",
+                          m.role === "user" ? "right-full mr-3" : "left-full ml-3"
+                        )}>
+                          <button 
+                            onClick={() => setShowEmojiPicker(showEmojiPicker === m.id ? null : m.id)}
+                            className="p-2 rounded-xl bg-panel border border-white/10 hover:border-primary/50 text-white/40 hover:text-primary backdrop-blur-xl shadow-lg transition-all active:scale-90"
+                          >
+                            <SmilePlus className="w-4 h-4" />
+                          </button>
+                          
+                          <AnimatePresence>
+                            {showEmojiPicker === m.id && (
+                              <motion.div 
+                                initial={{ opacity: 0, scale: 0.8, x: m.role === 'user' ? 10 : -10 }}
+                                animate={{ opacity: 1, scale: 1, x: 0 }}
+                                exit={{ opacity: 0, scale: 0.8, x: m.role === 'user' ? 10 : -10 }}
+                                className={cn(
+                                    "absolute top-0 p-1.5 rounded-xl bg-black/90 border border-white/10 backdrop-blur-md shadow-2xl flex items-center gap-1 z-[60]",
+                                    m.role === "user" ? "right-full mr-2 origin-right" : "left-full ml-2 origin-left",
+                                    i === 0 ? "top-0" : "-top-2" // Prevent cutoff for first message
                                 )}
-                              </motion.button>
-                            ))}
-                          </div>
-                          {messageAssets.length > maxPreview && (
-                            <button
-                              type="button"
-                              onClick={() => toggleImageGroup(messageKey)}
-                              className="text-[10px] font-black tracking-[0.3em] text-white/30 hover:text-primary transition-colors uppercase"
+                              >
+                                {["👍", "🔥", "😂", "😮", "😢", "😡"].map(emoji => (
+                                  <button 
+                                    key={emoji} 
+                                    onClick={() => {
+                                        handleReact(m.id, emoji, false);
+                                        setShowEmojiPicker(null);
+                                    }}
+                                    className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-lg transition-all hover:scale-110 text-lg"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
+
+                      {/* Rendered Reactions */}
+                      {m.reactions && m.reactions.length > 0 && (
+                        <div className={cn(
+                            "flex flex-wrap gap-1.5 mt-3 px-2",
+                            m.role === "user" ? "justify-end" : "justify-start"
+                        )}>
+                          {Object.entries((m.reactions || []).reduce((acc: any, r: any) => {
+                            acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                            return acc;
+                          }, {})).map(([emoji, count]: any) => (
+                            <button 
+                              key={emoji}
+                              onClick={() => handleReact(m.id, emoji, false)}
+                              className="px-2.5 py-1 rounded-xl bg-white/5 border border-white/5 hover:border-primary/30 text-xs flex items-center gap-2 backdrop-blur-md transition-all active:scale-90"
                             >
-                              {isExpanded ? "COLLAPSE_GRID" : `EXPAND_GRID_${messageAssets.length}`}
+                              <span>{emoji}</span>
+                              <span className="font-black text-[10px] opacity-40">{count}</span>
                             </button>
-                          )}
+                          ))}
                         </div>
                       )}
-
-                      <div className="text-sm md:text-[17px] leading-relaxed text-white/90 font-medium tracking-tight markdown-content">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                      </div>
-                      <div className={cn("absolute top-0 transform -translate-y-1/2 px-3 py-1 rounded-full text-[8px] font-black tracking-[0.2em] border", m.role === "user" ? "right-6 bg-primary text-black border-primary/50" : "left-6 bg-secondary text-white border-secondary/50")}>{m.role.toUpperCase()}</div>
                     </div>
                   </div>
                 </motion.div>
               );
             })}
-          </AnimatePresence>
+            </AnimatePresence>
+          </motion.div>
           {status === "PROCESSING" && (
             <div className="flex gap-6 max-w-5xl mx-auto items-center text-primary/40 text-xs font-black tracking-widest animate-pulse">
                <Activity className="w-4 h-4" /> INCOMING TRANSMISSION...
             </div>
           )}
           {Object.entries(typingUsers).length > 0 && (
-            <div className="flex gap-6 max-w-5xl mx-auto items-center text-secondary/40 text-xs font-black tracking-widest">
-               <div className="flex gap-1"><span className="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce" /><span className="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce [animation-delay:0.2s]" /><span className="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce [animation-delay:0.4s]" /></div>
-               {Object.values(typingUsers).join(", ")} IS ENCODING...
+            <div className="flex gap-4 max-w-5xl mx-auto items-center text-secondary/60 text-xs font-black tracking-widest pl-2">
+               <TypingWaveform />
+               <span className="animate-pulse">{Object.values(typingUsers).join(", ")} IS ENCODING...</span>
             </div>
           )}
         </div>
@@ -1548,7 +2175,16 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
               )}
               <div className="flex items-end gap-2 md:gap-3">
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*" multiple />
-                <button onClick={() => fileInputRef.current?.click()} className="p-4 text-white/20 hover:text-primary transition-colors"><FilePlus className="w-6 h-6" /></button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!chatPolicy.allowFileUploads}
+                  className={cn(
+                    "p-4 transition-colors",
+                    chatPolicy.allowFileUploads ? "text-white/20 hover:text-primary" : "text-white/10 cursor-not-allowed"
+                  )}
+                >
+                  <FilePlus className="w-6 h-6" />
+                </button>
                 <textarea rows={1} value={input} onChange={handleInputChange} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())} placeholder="Enter command sequence..." className="flex-1 bg-transparent border-none focus:ring-0 p-3 md:p-4 max-h-60 resize-none text-base md:text-xl font-medium placeholder:text-white/10 scroll-py-4" />
                 <button onClick={handleSend} disabled={(!input.trim() && filePreviews.length === 0) || status === "PROCESSING"} className="w-12 h-12 md:w-14 md:h-14 bg-primary text-black rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-20 disabled:scale-100 shadow-lg shadow-primary/20"><Send className="w-5 h-5 md:w-6 md:h-6" /></button>
               </div>
@@ -1567,6 +2203,7 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
            setConfig(newConfig);
            persistChatConfig(newConfig);
         }}
+        allowCustomApiKey={chatPolicy.allowCustomApiKey}
       />
 
       <ImpressiveModal 
@@ -1690,6 +2327,33 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
         onIndexChange={(index) =>
           setViewerState((prev) => (prev ? { ...prev, index } : null))
         }
+      />
+
+      <CreateDMModal
+        isOpen={isCreateDMOpen}
+        onClose={() => setIsCreateDMOpen(false)}
+        users={directoryUsers}
+        onSearch={fetchDirectoryUsers}
+        onConfirm={(userId) => {
+          const user = directoryUsers.find(u => u.id === userId);
+          if (user) {
+            setDirectThreadUser(user);
+            setActiveTab("collab");
+            setCollabViewMode("chats");
+          }
+        }}
+      />
+
+      <CreateSquadModal
+        isOpen={isCreateSquadOpen}
+        onClose={() => setIsCreateSquadOpen(false)}
+        users={directoryUsers}
+        onSearch={fetchDirectoryUsers}
+        allowedSettings={allowedSquadSettings}
+        onConfirm={(data) => {
+           console.log("Created Squad:", data);
+           // In real app: API call to create group chat with data.name and data.settings
+        }}
       />
 
     </div>

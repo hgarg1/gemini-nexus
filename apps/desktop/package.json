@@ -1,0 +1,86 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "description": "Nexus Core Desktop Interface",
+  "author": "Nexus Core",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && electron .",
+    "package": "tsc && electron-builder",
+    "dev": "tsc && electron ."
+  },
+  "devDependencies": {
+    "electron": "28.2.0",
+    "electron-builder": "^24.9.1",
+    "typescript": "^5.3.3"
+  },
+  "build": {
+    "electronVersion": "28.2.0",
+    "appId": "sh.nexus.app",
+    "productName": "Nexus",
+    "copyright": "Copyright © 2026 Nexus Core",
+    "fileAssociations": [
+      {
+        "ext": "nexus",
+        "name": "Nexus Intelligence Fragment",
+        "description": "Nexus encrypted intelligence data",
+        "role": "Viewer"
+      }
+    ],
+    "directories": {
+      "output": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "error.html"
+    ],
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Nexus",
+      "createDesktopShortcut": true,
+      "installerHeader": "assets/installer/header.png",
+      "installerSidebar": "assets/installer/sidebar.png",
+      "uninstallerSidebar": "assets/installer/sidebar.png",
+      "license": "assets/installer/license.txt"
+    },
+    "mac": {
+      "icon": "assets/icon.png",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "dmg": {
+      "title": "Nexus Installation",
+      "icon": "assets/icon.png",
+      "background": "assets/installer/dmg-background.png",
+      "contents": [
+        {
+          "x": 130,
+          "y": 150
+        },
+        {
+          "x": 410,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}

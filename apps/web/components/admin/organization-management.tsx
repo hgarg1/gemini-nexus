@@ -28,12 +28,16 @@ import {
   Info,
   Image,
   Mail,
-  Phone
+  Phone,
+  Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrgChart } from "./org-chart";
 import { ValidatedInput } from "../ui/validated-input";
 import { CustomSelect } from "../ui/custom-select";
+import { ImpressiveModal } from "@/components/impressive-modal";
+
+import { defaultOrgChatPolicy } from "@/lib/org-policy";
 
 interface OrganizationManagementProps {
   initialOrgs: any[];
@@ -46,6 +50,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState<any | null>(null);
+  const [resolvedBaseUrl, setResolvedBaseUrl] = useState(baseUrl);
   
   const [vizOrgId, setVizOrgId] = useState<string | null>(null);
   const [vizData, setVizData] = useState<any>(null);
@@ -57,10 +62,40 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
   const [members, setMembers] = useState<any[]>([]);
   const [overrides, setOverrides] = useState<any[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
+  const [overrideSelectValue, setOverrideSelectValue] = useState("");
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    type?: "danger" | "info" | "success";
+    confirmText?: string;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+  });
 
   const [detailsOrgId, setDetailsOrgId] = useState<string | null>(null);
   const [detailsStep, setDetailsStep] = useState(0);
   const [isDetailsSaving, setIsDetailsSaving] = useState(false);
+  
+  const [globalPolicy, setGlobalPolicy] = useState<any>(null);
+  const [systemOrgOverride, setSystemOrgOverride] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setResolvedBaseUrl(window.location.origin);
+    }
+    
+    fetch("/api/admin/chat/policy")
+      .then(res => res.json())
+      .then(data => {
+        if (data.policy) setGlobalPolicy(data.policy);
+        if (data.orgOverride) setSystemOrgOverride(data.orgOverride);
+      })
+      .catch(err => console.error("Failed to load global policy", err));
+  }, []);
 
   const emptyDetailsForm = {
     description: "",
@@ -120,7 +155,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
     pointOfContactName: "",
     pointOfContactEmail: "",
     pointOfContactPhone: "",
-    primaryInviteRequiresApproval: true,
+    primaryInviteRequiresApproval: false,
     primaryInviteLabel: "Primary Invite"
   });
 
@@ -140,6 +175,12 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
     o.name.toLowerCase().includes(search.toLowerCase()) || 
     o.slug.toLowerCase().includes(search.toLowerCase())
   );
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setResolvedBaseUrl(window.location.origin);
+    }
+  }, []);
 
   const onboardingSteps = [
     { label: "IDENTITY_CORE", subtitle: "Base identity and operational scope", icon: <Building2 className="w-4 h-4" /> },
@@ -196,6 +237,79 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
     };
   };
 
+  const resizeImage = (file: File, maxWidth: number, maxHeight: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new globalThis.Image(); // Use globalThis.Image to avoid conflict with Lucide Image icon
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const elem = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth || height > maxHeight) {
+                    if (width > height) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    } else {
+                        width *= maxHeight / height;
+                        height = maxHeight;
+                    }
+                }
+                elem.width = width;
+                elem.height = height;
+                const ctx = elem.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(ctx?.canvas.toDataURL(file.type, 0.9) || "");
+            };
+            img.onerror = (error) => reject(error);
+        };
+    });
+  };
+
+  const handleFileSelect = async (field: string, e: React.ChangeEvent<HTMLInputElement>, maxWidth: number, maxHeight: number) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        try {
+            const resized = await resizeImage(file, maxWidth, maxHeight);
+            updateDetailsField(field, resized);
+        } catch (error) {
+            console.error("Image resize failed", error);
+        }
+    }
+  };
+
+  const FileUpload = ({ label, value, onChange, previewHeight = "h-32", previewWidth = "w-full" }: any) => (
+    <div className="space-y-3">
+        <label className="text-[10px] font-black text-white/30 tracking-widest uppercase">{label}</label>
+        <div className="flex flex-col gap-3">
+            <div className={cn("rounded-2xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden relative group", previewHeight, previewWidth)}>
+                {value ? (
+                    <img src={value} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                    <div className="text-[9px] uppercase font-black tracking-[0.3em] text-white/20">PREVIEW</div>
+                )}
+                <label className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                    <input type="file" className="hidden" accept="image/*" onChange={onChange} />
+                    <div className="flex flex-col items-center gap-2 text-white">
+                        <Upload className="w-5 h-5" />
+                        <span className="text-[8px] font-black tracking-widest uppercase">CHANGE_IMAGE</span>
+                    </div>
+                </label>
+            </div>
+            {!value && (
+                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10 transition-all text-white/40 hover:text-white">
+                    <input type="file" className="hidden" accept="image/*" onChange={onChange} />
+                    <Upload className="w-4 h-4" />
+                    <span className="text-[9px] font-black tracking-widest uppercase">UPLOAD_FILE</span>
+                </label>
+            )}
+        </div>
+    </div>
+  );
+
   const openViz = async (org: any) => {
     setManageOrgId(null);
     setDetailsOrgId(null);
@@ -214,6 +328,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
     setVizOrgId(null);
     setManageOrgId(orgId);
     setLinkConfig({ label: "", requiresApproval: true, maxUses: "", expiresAt: "" });
+    setOverrideSelectValue("");
     setIsDataLoading(true);
     try {
         const [lRes, rRes, mRes, oRes] = await Promise.all([
@@ -294,17 +409,24 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
   };
 
   const handleKickMember = async (memberId: string) => {
-    if (!confirm("TERMINATE_ACCESS? This node will be purged from the sector.")) return;
-    try {
-        const res = await fetch(`/api/admin/organizations/${manageOrgId}/members/${memberId}`, {
-            method: "DELETE"
-        });
-        if (res.ok) {
-            setMembers(prev => prev.filter(m => m.userId !== memberId));
+    openConfirm({
+      title: "TERMINATE_ACCESS",
+      description: "This operative will be unlinked from the sector and removed from active access.",
+      type: "danger",
+      confirmText: "EXECUTE_PURGE",
+      onConfirm: async () => {
+        try {
+            const res = await fetch(`/api/admin/organizations/${manageOrgId}/members/${memberId}`, {
+                method: "DELETE"
+            });
+            if (res.ok) {
+                setMembers(prev => prev.filter(m => m.userId !== memberId));
+            }
+        } catch (err) {
+            console.error("Failed to kick member");
         }
-    } catch (err) {
-        console.error("Failed to kick member");
-    }
+      }
+    });
   };
 
   const handleToggleOrgOverride = async (permissionName: string, currentValue: boolean) => {
@@ -325,9 +447,12 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                 }
                 return [...prev, updated];
             });
+            return true;
         }
+        return false;
     } catch (err) {
         console.error("Override toggle failed");
+        return false;
     }
   };
 
@@ -364,34 +489,48 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
   };
 
   const handleReissueLink = async (linkId: string) => {
-    if (!confirm("REISSUE_LINK? This will rotate the access code immediately.")) return;
-    try {
-        const res = await fetch(`/api/admin/organizations/${manageOrgId}/links/${linkId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reissue: true })
-        });
-        if (res.ok) {
-            const updated = await res.json();
-            setLinks(prev => prev.map(l => l.id === linkId ? { ...l, code: updated.code, useCount: updated.useCount, active: updated.active } : l));
+    openConfirm({
+      title: "REISSUE_LINK",
+      description: "Rotating this access code will invalidate the existing link immediately.",
+      type: "info",
+      confirmText: "ROTATE_CODE",
+      onConfirm: async () => {
+        try {
+            const res = await fetch(`/api/admin/organizations/${manageOrgId}/links/${linkId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reissue: true })
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setLinks(prev => prev.map(l => l.id === linkId ? { ...l, code: updated.code, useCount: updated.useCount, active: updated.active } : l));
+            }
+        } catch (err) {
+            console.error("Link reissue failed");
         }
-    } catch (err) {
-        console.error("Link reissue failed");
-    }
+      }
+    });
   };
 
   const handleDeleteLink = async (linkId: string) => {
-    if (!confirm("PURGE_LINK? This access point will be permanently disabled.")) return;
-    try {
-        const res = await fetch(`/api/admin/organizations/${manageOrgId}/links/${linkId}`, {
-            method: "DELETE"
-        });
-        if (res.ok) {
-            setLinks(prev => prev.filter(l => l.id !== linkId));
+    openConfirm({
+      title: "PURGE_LINK",
+      description: "This access point will be permanently disabled and removed from circulation.",
+      type: "danger",
+      confirmText: "DISABLE_LINK",
+      onConfirm: async () => {
+        try {
+            const res = await fetch(`/api/admin/organizations/${manageOrgId}/links/${linkId}`, {
+                method: "DELETE"
+            });
+            if (res.ok) {
+                setLinks(prev => prev.filter(l => l.id !== linkId));
+            }
+        } catch (err) {
+            console.error("Link deletion failed");
         }
-    } catch (err) {
-        console.error("Link deletion failed");
-    }
+      }
+    });
   };
 
   const handleActionRequest = async (requestId: string, action: "APPROVE" | "REJECT") => {
@@ -438,7 +577,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
               label: "Primary Invite",
-              requiresApproval: true,
+              requiresApproval: false,
               isPrimary: true
             })
         });
@@ -461,7 +600,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
         pointOfContactName: org.pointOfContactName || "",
         pointOfContactEmail: org.pointOfContactEmail || "",
         pointOfContactPhone: org.pointOfContactPhone || "",
-        primaryInviteRequiresApproval: true,
+        primaryInviteRequiresApproval: false,
         primaryInviteLabel: "Primary Invite"
       });
     } else {
@@ -473,12 +612,45 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
         pointOfContactName: "",
         pointOfContactEmail: "",
         pointOfContactPhone: "",
-        primaryInviteRequiresApproval: true,
+        primaryInviteRequiresApproval: false,
         primaryInviteLabel: "Primary Invite"
       });
     }
     setIsModalOpen(true);
   };
+
+  const openConfirm = (config: {
+    title: string;
+    description: string;
+    type?: "danger" | "info" | "success";
+    confirmText?: string;
+    onConfirm: () => void;
+  }) => {
+    setConfirmState({
+      isOpen: true,
+      title: config.title,
+      description: config.description,
+      type: config.type,
+      confirmText: config.confirmText,
+      onConfirm: config.onConfirm,
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmState(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const confirmModal = (
+    <ImpressiveModal
+      isOpen={confirmState.isOpen}
+      onClose={closeConfirm}
+      onConfirm={confirmState.onConfirm}
+      title={confirmState.title}
+      description={confirmState.description}
+      type={confirmState.type}
+      confirmText={confirmState.confirmText}
+    />
+  );
 
   const closeModal = () => {
     setIsModalOpen(false);
@@ -513,15 +685,22 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("DELETE_ORGANIZATION? This will remove all associated members and data access.")) return;
-    try {
-      const res = await fetch(`/api/admin/organizations/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setOrgs(prev => prev.filter(o => o.id !== id));
+    openConfirm({
+      title: "DELETE_ORGANIZATION",
+      description: "This will remove the sector, members, and all associated access data.",
+      type: "danger",
+      confirmText: "PURGE_SECTOR",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/organizations/${id}`, { method: "DELETE" });
+          if (res.ok) {
+            setOrgs(prev => prev.filter(o => o.id !== id));
+          }
+        } catch (err) {
+          console.error("Failed to delete organization");
+        }
       }
-    } catch (err) {
-      console.error("Failed to delete organization");
-    }
+    });
   };
 
   if (vizOrgId && vizData) {
@@ -541,6 +720,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                 </button>
             </div>
             <OrgChart data={vizData} />
+            {confirmModal}
         </div>
     );
   }
@@ -730,47 +910,39 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                             )}
 
                             {detailsStep === 1 && (
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                                     <div className="space-y-6">
-                                        <ValidatedInput 
-                                            label="LOGO_URL"
+                                        <FileUpload 
+                                            label="BRAND_LOGO"
                                             value={detailsForm.logo}
-                                            onChange={(e) => updateDetailsField("logo", e.target.value)}
-                                            placeholder="https://cdn.domain/logo.png"
+                                            onChange={(e: any) => handleFileSelect("logo", e, 512, 512)}
+                                            previewHeight="h-40"
+                                            previewWidth="w-40"
                                         />
-                                        <div className="h-32 rounded-2xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden">
-                                            {detailsForm.logo ? (
-                                                <img src={detailsForm.logo} alt="Logo preview" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="text-[9px] uppercase font-black tracking-[0.3em] text-white/20">LOGO_PREVIEW</div>
-                                            )}
+                                        <div className="space-y-4 pt-4">
+                                            <ValidatedInput 
+                                                label="BRAND_PALETTE"
+                                                value={detailsForm.brandPalette}
+                                                onChange={(e) => updateDetailsField("brandPalette", e.target.value)}
+                                                placeholder="#00F2FF, #111827, #FFFFFF"
+                                            />
+                                            <ValidatedInput 
+                                                label="BRAND_VOICE"
+                                                value={detailsForm.brandVoice}
+                                                onChange={(e) => updateDetailsField("brandVoice", e.target.value)}
+                                                placeholder="COMMANDING / PRECISE / FUTURIST"
+                                            />
                                         </div>
-                                        <ValidatedInput 
-                                            label="BRAND_PALETTE"
-                                            value={detailsForm.brandPalette}
-                                            onChange={(e) => updateDetailsField("brandPalette", e.target.value)}
-                                            placeholder="#00F2FF, #111827, #FFFFFF"
-                                        />
-                                        <ValidatedInput 
-                                            label="BRAND_VOICE"
-                                            value={detailsForm.brandVoice}
-                                            onChange={(e) => updateDetailsField("brandVoice", e.target.value)}
-                                            placeholder="COMMANDING / PRECISE / FUTURIST"
-                                        />
                                     </div>
                                     <div className="space-y-6">
-                                        <ValidatedInput 
-                                            label="BANNER_URL"
+                                        <FileUpload 
+                                            label="BRAND_BANNER"
                                             value={detailsForm.banner}
-                                            onChange={(e) => updateDetailsField("banner", e.target.value)}
-                                            placeholder="https://cdn.domain/banner.jpg"
+                                            onChange={(e: any) => handleFileSelect("banner", e, 1920, 600)}
+                                            previewHeight="h-48"
                                         />
-                                        <div className="h-48 rounded-2xl border border-white/10 bg-black/40 flex items-center justify-center overflow-hidden">
-                                            {detailsForm.banner ? (
-                                                <img src={detailsForm.banner} alt="Banner preview" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="text-[9px] uppercase font-black tracking-[0.3em] text-white/20">BANNER_PREVIEW</div>
-                                            )}
+                                        <div className="p-4 rounded-2xl bg-white/5 border border-white/5 text-[9px] text-white/40 leading-relaxed uppercase">
+                                            Banners should be high-resolution landscape images (1920x600 recommended). Logos work best as square vector or PNG files with transparency.
                                         </div>
                                     </div>
                                 </div>
@@ -852,6 +1024,73 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                             ]}
                                             onChange={(val) => updateDetailsField("securityTier", val)}
                                         />
+                                        {/* ... existing fields ... */}
+                                        <div className="col-span-2 space-y-4 border-t border-white/5 pt-4">
+                                            <div className="text-[10px] font-black text-white/30 tracking-widest uppercase">ORG_CHAT_PROTOCOLS</div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <ToggleCard 
+                                                    label="ALLOW_DIRECT_MESSAGES"
+                                                    active={detailsForm.chatPolicy?.allowDirectMessages ?? defaultOrgChatPolicy.allowDirectMessages}
+                                                    disabled={
+                                                        (globalPolicy && !globalPolicy.allowDirectMessages) || 
+                                                        (systemOrgOverride && !systemOrgOverride.allowDirectMessages)
+                                                    }
+                                                    onToggle={() => setDetailsForm((prev: any) => ({
+                                                        ...prev,
+                                                        chatPolicy: { ...prev.chatPolicy, allowDirectMessages: !(prev.chatPolicy?.allowDirectMessages ?? defaultOrgChatPolicy.allowDirectMessages) }
+                                                    }))}
+                                                />
+                                                <ToggleCard 
+                                                    label="ALLOW_GROUP_CHATS"
+                                                    active={detailsForm.chatPolicy?.allowGroupChats ?? defaultOrgChatPolicy.allowGroupChats}
+                                                    disabled={
+                                                        (globalPolicy && !globalPolicy.allowGroupChats) || 
+                                                        (systemOrgOverride && !systemOrgOverride.allowGroupChats)
+                                                    }
+                                                    onToggle={() => setDetailsForm((prev: any) => ({
+                                                        ...prev,
+                                                        chatPolicy: { ...prev.chatPolicy, allowGroupChats: !(prev.chatPolicy?.allowGroupChats ?? defaultOrgChatPolicy.allowGroupChats) }
+                                                    }))}
+                                                />
+                                                <ToggleCard 
+                                                    label="ALLOW_FILE_UPLOADS"
+                                                    active={detailsForm.chatPolicy?.allowFileUploads ?? defaultOrgChatPolicy.allowFileUploads}
+                                                    disabled={
+                                                        (globalPolicy && !globalPolicy.allowFileUploads) || 
+                                                        (systemOrgOverride && !systemOrgOverride.allowFileUploads)
+                                                    }
+                                                    onToggle={() => setDetailsForm((prev: any) => ({
+                                                        ...prev,
+                                                        chatPolicy: { ...prev.chatPolicy, allowFileUploads: !(prev.chatPolicy?.allowFileUploads ?? defaultOrgChatPolicy.allowFileUploads) }
+                                                    }))}
+                                                />
+                                                <ToggleCard 
+                                                    label="ALLOW_DELETE_THREADS"
+                                                    active={detailsForm.chatPolicy?.allowDeleteThreads ?? defaultOrgChatPolicy.allowDeleteThreads}
+                                                    disabled={
+                                                        (globalPolicy && !globalPolicy.allowDeleteThreads) || 
+                                                        (systemOrgOverride && !systemOrgOverride.allowDeleteThreads)
+                                                    }
+                                                    onToggle={() => setDetailsForm((prev: any) => ({
+                                                        ...prev,
+                                                        chatPolicy: { ...prev.chatPolicy, allowDeleteThreads: !(prev.chatPolicy?.allowDeleteThreads ?? defaultOrgChatPolicy.allowDeleteThreads) }
+                                                    }))}
+                                                />
+                                                <ToggleCard 
+                                                    label="ALLOW_LEAVE_THREADS"
+                                                    active={detailsForm.chatPolicy?.allowLeaveThreads ?? defaultOrgChatPolicy.allowLeaveThreads}
+                                                    disabled={
+                                                        (globalPolicy && !globalPolicy.allowLeaveThreads) || 
+                                                        (systemOrgOverride && !systemOrgOverride.allowLeaveThreads)
+                                                    }
+                                                    onToggle={() => setDetailsForm((prev: any) => ({
+                                                        ...prev,
+                                                        chatPolicy: { ...prev.chatPolicy, allowLeaveThreads: !(prev.chatPolicy?.allowLeaveThreads ?? defaultOrgChatPolicy.allowLeaveThreads) }
+                                                    }))}
+                                                />
+                                            </div>
+                                        </div>
+                                        
                                         <CustomSelect 
                                             label="DATA_CLASSIFICATION"
                                             value={detailsForm.dataClassification}
@@ -1029,6 +1268,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                     </button>
                 </div>
             </div>
+            {confirmModal}
         </div>
     );
   }
@@ -1037,6 +1277,8 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
     const org = orgs.find(o => o.id === manageOrgId);
     const primaryLink = links.find(l => l.isPrimary) || null;
     const secondaryLinks = links.filter(l => !l.isPrimary);
+    const allowOverrides = overrides.filter((ovr) => ovr.value).length;
+    const denyOverrides = overrides.length - allowOverrides;
     return (
         <div className="space-y-10 font-mono">
             <div className="flex items-center justify-between">
@@ -1111,9 +1353,9 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                             {primaryLink ? (
                                 <>
                                     <div className="relative z-10 p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between group">
-                                        <code className="text-[10px] text-primary/60 font-mono truncate mr-4">{baseUrl}/join/{primaryLink.code}</code>
+                                        <code className="text-[10px] text-primary/60 font-mono truncate mr-4">{resolvedBaseUrl}/join/{primaryLink.code}</code>
                                         <button onClick={() => {
-                                            navigator.clipboard.writeText(`${baseUrl}/join/${primaryLink.code}`);
+                                            navigator.clipboard.writeText(`${resolvedBaseUrl}/join/${primaryLink.code}`);
                                         }} className="p-2 hover:text-primary transition-colors"><ExternalLink size={14} /></button>
                                     </div>
                                     <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-4 text-[9px] font-bold uppercase text-white/30">
@@ -1156,25 +1398,43 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                     ]}
                                     onChange={(val) => setLinkConfig(prev => ({ ...prev, requiresApproval: val === "approval" }))}
                                 />
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-white/30 tracking-widest uppercase">MAX_USES</label>
-                                        <input 
-                                            type="number"
-                                            value={linkConfig.maxUses}
-                                            onChange={(e) => setLinkConfig(prev => ({ ...prev, maxUses: e.target.value }))}
-                                            className="cyber-input w-full"
-                                            placeholder="Optional"
-                                        />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="relative p-4 rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-70" />
+                                        <div className="relative z-10 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black text-white/40 tracking-widest uppercase">MAX_USES</label>
+                                                <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center text-primary">
+                                                    <Activity className="w-3.5 h-3.5" />
+                                                </div>
+                                            </div>
+                                            <input 
+                                                type="number"
+                                                value={linkConfig.maxUses}
+                                                onChange={(e) => setLinkConfig(prev => ({ ...prev, maxUses: e.target.value }))}
+                                                className="w-full bg-transparent text-lg font-black tracking-tight text-white outline-none"
+                                                placeholder="UNLIMITED"
+                                            />
+                                            <div className="text-[8px] font-black uppercase text-white/30 tracking-[0.3em]">CAP_USAGE_COUNT</div>
+                                        </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-white/30 tracking-widest uppercase">EXPIRES_AT</label>
-                                        <input 
-                                            type="datetime-local"
-                                            value={linkConfig.expiresAt}
-                                            onChange={(e) => setLinkConfig(prev => ({ ...prev, expiresAt: e.target.value }))}
-                                            className="cyber-input w-full"
-                                        />
+                                    <div className="relative p-4 rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-secondary/10 via-transparent to-transparent opacity-70" />
+                                        <div className="relative z-10 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black text-white/40 tracking-widest uppercase">EXPIRES_AT</label>
+                                                <div className="w-7 h-7 rounded-lg bg-secondary/10 border border-secondary/30 flex items-center justify-center text-secondary">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                </div>
+                                            </div>
+                                            <input 
+                                                type="datetime-local"
+                                                value={linkConfig.expiresAt}
+                                                onChange={(e) => setLinkConfig(prev => ({ ...prev, expiresAt: e.target.value }))}
+                                                className="w-full bg-transparent text-sm font-bold text-white outline-none uppercase"
+                                            />
+                                            <div className="text-[8px] font-black uppercase text-white/30 tracking-[0.3em]">TIME_LOCK</div>
+                                        </div>
                                     </div>
                                 </div>
                                 <button 
@@ -1194,8 +1454,16 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                     {secondaryLinks.length === 0 ? (
                                         <div className="py-16 text-center opacity-30 text-[10px] font-black tracking-[0.4em] uppercase">No secondary links forged.</div>
                                     ) : (
-                                        secondaryLinks.map(link => (
-                                            <div key={link.id} className="glass-panel p-6 rounded-[24px] border-white/5 space-y-4 relative group/card">
+                                        <AnimatePresence>
+                                            {secondaryLinks.map(link => (
+                                                <motion.div
+                                                    key={link.id}
+                                                    layout
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: -10 }}
+                                                    className="glass-panel p-6 rounded-[24px] border-white/5 space-y-4 relative group/card"
+                                                >
                                                 <div className="flex justify-between items-center">
                                                     <div className="flex items-center gap-3">
                                                         <LinkIcon className="w-4 h-4 text-primary" />
@@ -1212,9 +1480,9 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                                     </div>
                                                 </div>
                                                 <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between group">
-                                                    <code className="text-[10px] text-primary/60 font-mono truncate mr-4">{baseUrl}/join/{link.code}</code>
+                                                    <code className="text-[10px] text-primary/60 font-mono truncate mr-4">{resolvedBaseUrl}/join/{link.code}</code>
                                                     <button onClick={() => {
-                                                        navigator.clipboard.writeText(`${baseUrl}/join/${link.code}`);
+                                                        navigator.clipboard.writeText(`${resolvedBaseUrl}/join/${link.code}`);
                                                     }} className="p-2 hover:text-primary transition-colors"><ExternalLink size={14} /></button>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-3">
@@ -1228,8 +1496,9 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                                         <Clock size={12} /> {link.useCount} USES
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))
+                                                </motion.div>
+                                            ))}
+                                        </AnimatePresence>
                                     )}
                                 </div>
                             </div>
@@ -1242,8 +1511,16 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                         {requests.length === 0 ? (
                             <div className="py-20 text-center opacity-20 text-[10px] font-black tracking-[0.4em] uppercase">No pending uplink requests detected.</div>
                         ) : (
-                            requests.map(req => (
-                                <div key={req.id} className="glass-panel p-6 rounded-[24px] border-white/5 flex items-center justify-between">
+                            <AnimatePresence>
+                            {requests.map(req => (
+                                <motion.div
+                                    key={req.id}
+                                    layout
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="glass-panel p-6 rounded-[24px] border-white/5 flex items-center justify-between"
+                                >
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
                                             {req.user.image ? <img src={req.user.image} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-white/20" />}
@@ -1261,8 +1538,9 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                             <UserX size={14} /> REJECT
                                         </button>
                                     </div>
-                                </div>
-                            ))
+                                </motion.div>
+                            ))}
+                            </AnimatePresence>
                         )}
                     </motion.div>
                 )}
@@ -1270,8 +1548,16 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                 {activeSubTab === "members" && (
                     <motion.div key="members" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <AnimatePresence>
                             {members.map(member => (
-                                <div key={member.userId} className="glass-panel p-6 rounded-[24px] border-white/5 flex items-center justify-between">
+                                <motion.div
+                                    key={member.userId}
+                                    layout
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="glass-panel p-6 rounded-[24px] border-white/5 flex items-center justify-between"
+                                >
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
                                             {member.user.image ? <img src={member.user.image} className="w-full h-full object-cover" /> : <User className="w-5 h-5 text-white/20" />}
@@ -1284,53 +1570,103 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                                     <button onClick={() => handleKickMember(member.userId)} className="p-2 rounded-lg hover:bg-red-500/10 text-white/20 hover:text-red-500 transition-all" title="Terminate Access">
                                         <UserX size={18} />
                                     </button>
-                                </div>
+                                </motion.div>
                             ))}
+                            </AnimatePresence>
                         </div>
                     </motion.div>
                 )}
 
                 {activeSubTab === "overrides" && (
-                    <motion.div key="overrides" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <div className="flex items-center gap-4 p-4 rounded-2xl bg-red-500/5 border border-red-500/20 flex-1 mr-4">
-                                <ShieldAlert className="w-5 h-5 text-red-500" />
-                                <p className="text-[9px] text-red-500 uppercase font-black tracking-widest leading-relaxed">
-                                    Global sector overrides take precedence over inherited role permissions for all members within this squadron.
-                                </p>
-                            </div>
-                            <div className="w-64">
-                                <CustomSelect 
-                                    placeholder="APPLY_NEW_OVERRIDE..."
-                                    value=""
-                                    options={availablePermissions.map(p => ({ label: p.name.toUpperCase(), value: p.name }))}
-                                    onChange={(val) => handleToggleOrgOverride(val, false)}
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-3">
-                            {overrides.map(ovr => (
-                                <div key={ovr.id} className="glass-panel p-5 rounded-2xl border-white/5 flex items-center justify-between hover:border-primary/20 transition-all">
-                                    <div>
-                                        <div className="text-xs font-black text-white uppercase tracking-widest">{ovr.permission.name}</div>
-                                        <div className="text-[8px] text-white/30 uppercase mt-1 font-bold">Applied Global Logic</div>
-                                    </div>
+                    <motion.div key="overrides" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-8">
+                        <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
+                            <div className="glass-panel p-6 rounded-[28px] border-white/5 relative overflow-hidden">
+                                <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 via-transparent to-transparent opacity-70" />
+                                <div className="relative z-10 flex flex-col gap-5">
                                     <div className="flex items-center gap-4">
-                                        <div className={cn(
-                                            "px-3 py-1 rounded-md text-[8px] font-black uppercase",
-                                            ovr.value ? "bg-green-500/10 text-green-500 border border-green-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
-                                        )}>
-                                            {ovr.value ? "FORCE_ALLOW" : "FORCE_DENY"}
+                                        <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500">
+                                            <ShieldAlert className="w-5 h-5" />
                                         </div>
-                                        <button 
-                                            onClick={() => handleToggleOrgOverride(ovr.permission.name, ovr.value)}
-                                            className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-primary transition-all"
-                                        >
-                                            <Settings2 size={16} />
-                                        </button>
+                                        <div>
+                                            <div className="text-[10px] font-black tracking-[0.4em] uppercase text-red-400/80">SECTOR_OVERRIDE_MATRIX</div>
+                                            <p className="text-[9px] text-red-300/70 uppercase font-black tracking-widest mt-2 leading-relaxed">
+                                                Overrides supersede role inheritance for every operative in the sector.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div className="p-4 rounded-2xl bg-white/5 border border-white/5 text-center">
+                                            <div className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30">TOTAL</div>
+                                            <div className="text-2xl font-black text-white mt-2">{overrides.length}</div>
+                                        </div>
+                                        <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
+                                            <div className="text-[9px] font-black uppercase tracking-[0.3em] text-green-500/70">ALLOW</div>
+                                            <div className="text-2xl font-black text-green-500 mt-2">{allowOverrides}</div>
+                                        </div>
+                                        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
+                                            <div className="text-[9px] font-black uppercase tracking-[0.3em] text-red-500/70">DENY</div>
+                                            <div className="text-2xl font-black text-red-500 mt-2">{denyOverrides}</div>
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
+
+                            <div className="glass-panel p-6 rounded-[28px] border-white/5 space-y-5 relative overflow-hidden">
+                                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-70" />
+                                <div className="relative z-10 space-y-4">
+                                    <div className="text-[10px] font-black tracking-[0.4em] uppercase text-white/40">DEPLOY_OVERRIDE</div>
+                                    <CustomSelect 
+                                        label="PERMISSION_SIGNAL"
+                                        placeholder="SELECT_OVERRIDE_VECTOR..."
+                                        value={overrideSelectValue}
+                                        options={availablePermissions.map(p => ({ label: p.name.toUpperCase(), value: p.name }))}
+                                        onChange={async (val) => {
+                                          setOverrideSelectValue(val);
+                                          const ok = await handleToggleOrgOverride(val, false);
+                                          if (ok) {
+                                            setTimeout(() => setOverrideSelectValue(""), 500);
+                                          }
+                                        }}
+                                    />
+                                    <div className="text-[9px] text-white/30 uppercase font-bold leading-relaxed">
+                                        Selecting a permission instantly deploys a sector-level override. Toggle later to switch allow/deny.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <AnimatePresence>
+                                {overrides.map(ovr => (
+                                    <motion.div
+                                        key={ovr.id}
+                                        layout
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="glass-panel p-5 rounded-2xl border-white/5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 hover:border-primary/20 transition-all"
+                                    >
+                                        <div>
+                                            <div className="text-xs font-black text-white uppercase tracking-widest">{ovr.permission.name}</div>
+                                            <div className="text-[8px] text-white/30 uppercase mt-1 font-bold">Global override active</div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn(
+                                                "px-3 py-1 rounded-md text-[8px] font-black uppercase",
+                                                ovr.value ? "bg-green-500/10 text-green-500 border border-green-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
+                                            )}>
+                                                {ovr.value ? "FORCE_ALLOW" : "FORCE_DENY"}
+                                            </div>
+                                            <button 
+                                                onClick={() => handleToggleOrgOverride(ovr.permission.name, ovr.value)}
+                                                className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-primary transition-all"
+                                            >
+                                                <Settings2 size={16} />
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
                             {overrides.length === 0 && (
                                 <div className="py-20 text-center opacity-20 text-[10px] font-black tracking-[0.4em] uppercase">No global overrides configured for this sector.</div>
                             )}
@@ -1338,6 +1674,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
                     </motion.div>
                 )}
             </AnimatePresence>
+            {confirmModal}
         </div>
     );
   }
@@ -1561,6 +1898,7 @@ export function OrganizationManagement({ initialOrgs, availablePermissions, base
           </>
         )}
       </AnimatePresence>
+      {confirmModal}
     </div>
   );
 }
@@ -1605,5 +1943,37 @@ function InfoRow({ icon, label, value, color = "text-white" }: any) {
       </div>
       <span className={cn("text-xs font-mono font-bold", color)}>{value}</span>
     </div>
+  );
+}
+
+function ToggleCard({
+  label,
+  active,
+  onToggle,
+  disabled
+}: {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      className={cn(
+        "p-4 rounded-2xl border text-left transition-all",
+        active
+          ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_20px_rgba(0,242,255,0.12)]"
+          : "bg-white/5 border-white/10 text-white/40 hover:border-white/20",
+        disabled && "cursor-not-allowed opacity-50"
+      )}
+    >
+      <div className="text-[9px] font-black tracking-[0.25em] uppercase">{label}</div>
+      <div className="mt-2 text-[8px] font-bold uppercase tracking-widest">
+        {active ? "ENABLED" : "RESTRICTED"}
+      </div>
+    </button>
   );
 }

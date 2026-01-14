@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Lost</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050508;
+            color: #f8fafc;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        .icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem;
+            box-shadow: 0 0 40px rgba(239, 68, 68, 0.2);
+            animation: pulse 2s infinite;
+        }
+
+        .icon svg {
+            width: 40px;
+            height: 40px;
+            color: #ef4444;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            margin: 0 0 1rem;
+            text-transform: uppercase;
+        }
+
+        p {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin: 0 0 3rem;
+            line-height: 1.6;
+        }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        button {
+            background: #00f2ff;
+            color: #000;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 1rem;
+            font-family: inherit;
+            font-size: 0.75rem;
+            font-weight: 900;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+        }
+
+        button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            box-shadow: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            background: #fff;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
+        }
+
+        button.secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+            z-index: 1;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100px;
+            background: linear-gradient(to bottom, transparent, rgba(0, 242, 255, 0.05), transparent);
+            animation: scan 8s linear infinite;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes scan {
+            from { transform: translateY(-100%); }
+            to { transform: translateY(100vh); }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="scanline"></div>
+    <div class="container">
+        <div class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+        </div>
+        <h1>Connection Terminated</h1>
+        <p>
+            Nexus Core Uplink Failed.<br>
+            Target Unreachable: localhost:3005
+        </p>
+        <div class="actions">
+            <button id="retryBtn">Re-Initialize Uplink</button>
+            <button id="quitBtn" class="secondary">Terminate Process</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('retryBtn').addEventListener('click', () => {
+            if (window.nexusDesktop) {
+                window.nexusDesktop.send('toMain', { type: 'retry-connection' });
+            } else {
+                location.reload();
+            }
+        });
+
+        document.getElementById('quitBtn').addEventListener('click', () => {
+            if (window.nexusDesktop) {
+                window.nexusDesktop.send('toMain', { type: 'quit-app' });
+            } else {
+                window.close();
+            }
+        });
+    </script>
+</body>
+</html>

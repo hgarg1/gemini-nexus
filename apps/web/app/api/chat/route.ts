@@ -42,13 +42,14 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
-    const { title, config } = await req.json();
+    const { title, config, botId } = await req.json();
 
     const chat = await prisma.chat.create({
       data: {
         title: title || "New Transmission",
         userId: userId,
         config: config || {},
+        botId: botId || undefined
       }
     });
 

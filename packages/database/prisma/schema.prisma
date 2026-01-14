@@ -19,6 +19,8 @@ model User {
   roleId        String?
   userRole      Role?     @relation(fields: [roleId], references: [id])
   isBanned      Boolean   @default(false)
+  activeOrgId   String?
+  notificationSettings Json?
   
   // Organization & Reporting
   parentId      String?
@@ -27,11 +29,17 @@ model User {
   memberships   OrganizationMember[]
   overrides     PermissionOverride[]
   joinRequests  OrganizationJoinRequest[]
+  requestedConnections UserConnection[] @relation("UserConnectionRequester")
+  receivedConnections  UserConnection[] @relation("UserConnectionTarget")
 
   accounts      Account[]
   sessions      Session[]
   chats         Chat[]
   collaborations Collaborator[]
+  sentDirectMessages DirectMessage[] @relation("DirectMessageSender")
+  receivedDirectMessages DirectMessage[] @relation("DirectMessageReceiver")
+  directMessageReactions DirectMessageReaction[]
+  messageReactions MessageReaction[]
   apiKey        String? // User's custom Gemini API key
   memories      Memory[]
   checkpoints   Checkpoint[]
@@ -41,6 +49,14 @@ model User {
   authenticators Authenticator[]
   usageLogs     UsageLog[]
   adminAIChats  AdminAIChat[]
+  createdBots   Bot[]
+  installedBots UserBotLibrary[]
+  botReviews    BotReview[]
+  subscriptionTierId String?
+  subscriptionTier SubscriptionTier? @relation(fields: [subscriptionTierId], references: [id])
+  canBlockOthers Boolean   @default(true)
+  canViewBlockLogs Boolean @default(true)
+  restrictedBlockIds String[] // IDs of users this user cannot block
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -52,6 +68,8 @@ model Organization {
   description String?
   logo        String?
   banner      String?
+  chatPolicy  Json?
+  nexusPolicy Json?                // { allowBotCreation: boolean, maxCreatedBots: number, maxInstalledBots: number }
   pointOfContactName  String?
   pointOfContactEmail String?
   pointOfContactPhone String?
@@ -260,12 +278,16 @@ model Chat {
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages    Message[]
   assets      Asset[]
+  links       ChatLink[]
   collaborators Collaborator[]
   branches    Branch[]
   checkpoints Checkpoint[]
   mergeRequests MergeRequest[]
   isPublic    Boolean       @default(false)
   config      Json?         // Stores Gemini specific settings (temp, top-p, etc)
+  appearanceSettings Json?  // Stores extensive UI customization
+  botId       String?
+  bot         Bot?          @relation(fields: [botId], references: [id])
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 }
@@ -278,6 +300,7 @@ model Message {
   content   String   @db.Text
   images    String[] // Deprecated: Moving to Asset model
   assets    Asset[]
+  reactions MessageReaction[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -303,8 +326,87 @@ model Collaborator {
   userId  String
   chat    Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 
   @@unique([chatId, userId])
+}
+
+model ChatLink {
+  id        String   @id @default(cuid())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  code      String   @unique @default(cuid())
+  label     String?
+  maxUses   Int?
+  useCount  Int      @default(0)
+  expiresAt DateTime?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([chatId])
+}
+
+model UserConnection {
+  id          String   @id @default(cuid())
+  requesterId String
+  targetId    String
+  status      String   @default("PENDING") // PENDING, ACCEPTED, BLOCKED
+  appearanceSettings Json? // UI customization for this specific DM
+  requester   User     @relation("UserConnectionRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target      User     @relation("UserConnectionTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([requesterId, targetId])
+}
+
+model DirectMessage {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  sender     User     @relation("DirectMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("DirectMessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String   @db.Text
+  assets     DirectMessageAsset[]
+  reactions  DirectMessageReaction[]
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model DirectMessageAsset {
+  id              String        @id @default(cuid())
+  url             String        @db.Text
+  directMessageId String
+  directMessage   DirectMessage @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+}
+
+model DirectMessageReaction {
+  id              String        @id @default(cuid())
+  emoji           String
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  directMessageId String
+  directMessage   DirectMessage @relation(fields: [directMessageId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+
+  @@unique([directMessageId, userId, emoji])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  emoji     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId, emoji])
 }
 
 model Memory {
@@ -414,4 +516,96 @@ model MergeComment {
   createdAt     DateTime @default(now())
 
   @@index([mergeRequestId])
+}
+
+model Bot {
+  id                String         @id @default(cuid())
+  name              String
+  description       String?
+  avatar            String?
+  systemInstruction String         @db.Text
+  isPublic          Boolean        @default(false)
+  status            String         @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  config            Json?          // Stores model params like temp, model name
+  skills            String[]       // Array of enabled skills: 'web_search', 'code_execution', etc
+  appearance        Json?          // Stores persona settings: color, style, etc
+  tags              String[]       // Categories for discovery
+  avgRating         Float          @default(0)
+  reviewCount       Int            @default(0)
+  creatorId         String
+  creator           User           @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  knowledgeBase     KnowledgeBase?
+  usage             BotUsage?
+  chats             Chat[]
+  installedBy       UserBotLibrary[]
+  reviews           BotReview[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([creatorId])
+}
+
+model BotReview {
+  id        String   @id @default(cuid())
+  rating    Int      // 1-5
+  comment   String?  @db.Text
+  botId     String
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([botId, userId])
+}
+
+model UserBotLibrary {
+  id        String   @id @default(cuid())
+  userId    String
+  botId     String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, botId])
+}
+
+model KnowledgeBase {
+  id        String   @id @default(cuid())
+  botId     String   @unique
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  documents Json?    // Array of { name, url, type, size, status }
+  chunks    DocumentChunk[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DocumentChunk {
+  id              String        @id @default(cuid())
+  knowledgeBaseId String
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  content         String        @db.Text
+  embedding       Float[]       // 768d vector stored as array
+  metadata        Json?         // Source document info
+  createdAt       DateTime      @default(now())
+
+  @@index([knowledgeBaseId])
+}
+
+model BotUsage {
+  id               String   @id @default(cuid())
+  botId            String   @unique
+  bot              Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  interactionCount Int      @default(0)
+  tokenCount       Int      @default(0)
+  updatedAt        DateTime @updatedAt
+}
+
+model SubscriptionTier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  features  Json?
+  limits    Json?
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

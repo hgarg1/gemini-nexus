@@ -16,17 +16,17 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   providers: [
-    GoogleProvider({
+    (GoogleProvider as any)({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    CredentialsProvider({
+    (CredentialsProvider as any)({
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials: Record<string, string>) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error("Invalid credentials");
         }
@@ -53,7 +53,7 @@ export const authOptions: NextAuthOptions = {
         return user;
       },
     }),
-  ],
+  ] as any,
   callbacks: {
     jwt: async ({ token, user, trigger, session }) => {
       if (user) {

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Terminal, ArrowRight, ShieldCheck, Mail, User, Check, X, Lock } from "lucide-react";
+import { ArrowRight, ShieldCheck, Mail, User, Check, Lock } from "lucide-react";
 import Link from "next/link";
 import { registerSchema } from "@/lib/validations";
+import { buildPasswordRequirements, defaultPasswordPolicy, validatePasswordWithPolicy } from "@/lib/password-policy";
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -16,28 +17,43 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [passwordPolicy, setPasswordPolicy] = useState(defaultPasswordPolicy);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl");
 
-  const passwordRequirements = [
-    { label: "8+ Characters", regex: /.{8,}/ },
-    { label: "Uppercase", regex: /[A-Z]/ },
-    { label: "Lowercase", regex: /[a-z]/ },
-    { label: "Number", regex: /[0-9]/ },
-    { label: "Special Char", regex: /[^A-Za-z0-9]/ },
-  ];
+  const passwordRequirements = useMemo(
+    () => buildPasswordRequirements(passwordPolicy, formData.password),
+    [passwordPolicy, formData.password]
+  );
+
+  useEffect(() => {
+    const loadPolicy = async () => {
+      try {
+        const res = await fetch("/api/password-policy");
+        const data = await res.json();
+        if (res.ok && data.policy) {
+          setPasswordPolicy(data.policy);
+        }
+      } catch (err) {
+        console.error("Failed to load password policy");
+      }
+    };
+    loadPolicy();
+  }, []);
 
   const validate = () => {
     const result = registerSchema.safeParse(formData);
+    const newErrors: Record<string, string> = {};
     if (!result.success) {
-      const newErrors: Record<string, string> = {};
       result.error.issues.forEach((err) => {
         if (err.path[0]) newErrors[err.path[0] as string] = err.message;
       });
-      setErrors(newErrors);
-      return false;
     }
-    setErrors({});
-    return true;
+    const policyError = validatePasswordWithPolicy(formData.password, passwordPolicy);
+    if (policyError) newErrors.password = policyError;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,7 +75,8 @@ export default function RegisterPage() {
       if (!res.ok) {
         setServerError(data.error || "REGISTRATION_FAILED");
       } else {
-        router.push("/login?registered=true");
+        const target = callbackUrl ? `/login?registered=true&callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login?registered=true";
+        router.push(target);
       }
     } catch (err) {
       setServerError("SYSTEM_ERROR: REGISTRY_UNAVAILABLE");
@@ -163,11 +180,23 @@ export default function RegisterPage() {
                   )}
                   placeholder="••••••••••••"
                 />
+                <AnimatePresence>
+                  {errors.password && (
+                    <motion.p 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="text-accent text-[10px] font-bold tracking-tight px-1"
+                    >
+                      !! {errors.password.toUpperCase()}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
               </div>
               
               <div className="grid grid-cols-2 gap-2 px-1">
                 {passwordRequirements.map((req, i) => {
-                  const isMet = req.regex.test(formData.password);
+                  const isMet = req.valid;
                   return (
                     <div key={i} className="flex items-center gap-2">
                       <div className={cn(
@@ -221,11 +250,19 @@ export default function RegisterPage() {
           </form>
 
           <p className="mt-10 text-center text-white/30 text-[10px] font-bold tracking-[0.3em] uppercase">
-            ALREADY DEPLOYED? <Link href="/login" className="text-secondary hover:text-secondary/80 transition-colors">ACCESS_GATEWAY</Link>
+            ALREADY DEPLOYED? <Link href={callbackUrl ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login"} className="text-secondary hover:text-secondary/80 transition-colors">ACCESS_GATEWAY</Link>
           </p>
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center text-secondary">LOADING_REGISTRY...</div>}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }
 

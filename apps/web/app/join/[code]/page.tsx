@@ -2,18 +2,22 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Building2, ShieldCheck, ChevronRight, Loader2, AlertCircle, Sparkles } from "lucide-react";
+import { Building2, ShieldCheck, ChevronRight, Loader2, AlertCircle, Sparkles, UserPlus, LogIn, BadgeCheck } from "lucide-react";
 import DecryptedText from "@/components/landing/decrypted-text";
 import { cn } from "@/lib/utils";
 
 export default function JoinPage() {
   const { code } = useParams();
   const router = useRouter();
+  const { status } = useSession();
   const [state, setState] = useState<"loading" | "error" | "ready" | "pending" | "success">("loading");
   const [error, setError] = useState("");
   const [org, setOrg] = useState<any>(null);
   const [isJoining, setIsJoining] = useState(false);
+  const [requiresApproval, setRequiresApproval] = useState<boolean | null>(null);
+  const [hasAutoJoined, setHasAutoJoined] = useState(false);
 
   useEffect(() => {
     const validateLink = async () => {
@@ -22,6 +26,7 @@ export default function JoinPage() {
         const data = await res.json();
         if (res.ok) {
           setOrg(data.organization);
+          setRequiresApproval(data.requiresApproval ?? null);
           setState("ready");
         } else {
           setError(data.error);
@@ -35,7 +40,8 @@ export default function JoinPage() {
     validateLink();
   }, [code]);
 
-  const handleJoin = async () => {
+  const handleJoin = async (auto = false) => {
+    if (isJoining) return;
     setIsJoining(true);
     try {
       const res = await fetch(`/api/join/${code}`, { method: "POST" });
@@ -58,6 +64,13 @@ export default function JoinPage() {
       setIsJoining(false);
     }
   };
+
+  useEffect(() => {
+    if (state === "ready" && status === "authenticated" && !hasAutoJoined) {
+      setHasAutoJoined(true);
+      handleJoin(true);
+    }
+  }, [state, status, hasAutoJoined]);
 
   return (
     <div className="h-screen w-full bg-black text-white flex flex-col items-center justify-center p-6 relative overflow-hidden font-mono">
@@ -98,7 +111,7 @@ export default function JoinPage() {
             key="ready"
             initial={{ opacity: 0, y: 20 }} 
             animate={{ opacity: 1, y: 0 }}
-            className="w-full max-w-lg text-center"
+            className="w-full max-w-3xl text-center"
           >
             <div className="mb-8">
                 <motion.div 
@@ -117,15 +130,63 @@ export default function JoinPage() {
                 </p>
             </div>
 
-            <div className="space-y-4">
-                <button 
-                    onClick={handleJoin}
-                    disabled={isJoining}
-                    className="w-full py-5 bg-primary text-black font-black rounded-2xl text-[10px] tracking-[0.3em] uppercase hover:scale-[1.02] active:scale-95 transition-all shadow-[0_10px_40px_rgba(0,242,255,0.3)] flex items-center justify-center gap-3"
-                >
-                    {isJoining ? <Loader2 className="w-4 h-4 animate-spin" /> : <>INITIATE_ONBOARDING <ChevronRight className="w-4 h-4" /></>}
-                </button>
-                <div className="text-[9px] text-white/20 font-bold uppercase tracking-widest">Security clearance level: RESTRICTED</div>
+            <div className="glass-panel rounded-[32px] border-white/10 p-8 space-y-6 text-left">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <div className="text-[10px] font-black tracking-[0.3em] text-primary/60 uppercase">ACCOUNT_BRIDGE</div>
+                        <div className="text-lg font-black tracking-tight uppercase mt-2">LINK_IDENTITY_TO_SECTOR</div>
+                        <p className="text-white/40 text-xs mt-2 font-mono">
+                            Secure handshake requires identity linkage. Authentication completes onboarding and assigns org admin clearance.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-[9px] font-bold uppercase tracking-[0.3em] text-white/30">
+                        <BadgeCheck className="w-4 h-4 text-primary" />
+                        ORG_ADMIN_CLEARANCE
+                    </div>
+                </div>
+
+                {status === "unauthenticated" ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <button
+                            onClick={() => router.push(`/login?callbackUrl=/join/${code}`)}
+                            className="w-full py-5 rounded-2xl bg-primary text-black text-[10px] font-black tracking-[0.3em] uppercase hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 shadow-[0_10px_40px_rgba(0,242,255,0.3)]"
+                        >
+                            <LogIn className="w-4 h-4" /> LINK_EXISTING_ACCOUNT
+                        </button>
+                        <button
+                            onClick={() => router.push(`/register?callbackUrl=/join/${code}`)}
+                            className="w-full py-5 rounded-2xl bg-white/5 border border-white/10 text-white/70 text-[10px] font-black tracking-[0.3em] uppercase hover:border-primary/40 hover:text-white transition-all flex items-center justify-center gap-3"
+                        >
+                            <UserPlus className="w-4 h-4" /> CREATE_NEW_ACCOUNT
+                        </button>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <button 
+                            onClick={() => handleJoin()}
+                            disabled={isJoining || status === "loading"}
+                            className="w-full py-5 bg-primary text-black font-black rounded-2xl text-[10px] tracking-[0.3em] uppercase hover:scale-[1.02] active:scale-95 transition-all shadow-[0_10px_40px_rgba(0,242,255,0.3)] flex items-center justify-center gap-3"
+                        >
+                            {isJoining || status === "loading" ? <Loader2 className="w-4 h-4 animate-spin" /> : <>FINALIZE_ONBOARDING <ChevronRight className="w-4 h-4" /></>}
+                        </button>
+                        <div className="flex flex-wrap items-center gap-4 text-[9px] text-white/30 font-bold uppercase tracking-widest">
+                            <span className={cn("inline-flex items-center gap-2 px-3 py-1 rounded-full border", requiresApproval ? "border-primary/40 text-primary" : "border-green-500/40 text-green-500")}>
+                                <ShieldCheck className="w-3 h-3" />
+                                {requiresApproval ? "APPROVAL_REQUIRED" : "AUTO_JOIN_ENABLED"}
+                            </span>
+                            {status === "authenticated" && (
+                              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 text-white/40">
+                                  ACCOUNT_LINKED
+                              </span>
+                            )}
+                            {status === "loading" && (
+                              <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 text-white/40">
+                                  SYNCING_IDENTITY
+                              </span>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
           </motion.div>
         )}
