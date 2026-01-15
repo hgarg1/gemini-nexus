@@ -44,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install prisma globally to allow running migrations/push
-RUN npm install -g prisma
+RUN npm install -g prisma@5
 
 # Don't run as root
 RUN addgroup --system --gid 1001 nodejs

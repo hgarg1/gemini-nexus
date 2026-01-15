@@ -18,6 +18,7 @@ export function MemoryModal({ visible, onClose }: MemoryModalProps) {
   const [label, setLabel] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sort, setSort] = useState<'recent' | 'label'>('recent');
 
   const loadMemories = async () => {
     setLoading(true);
@@ -39,11 +40,18 @@ export function MemoryModal({ visible, onClose }: MemoryModalProps) {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return memories;
-    return memories.filter((memory) =>
-      `${memory.label} ${memory.content}`.toLowerCase().includes(term)
-    );
-  }, [memories, search]);
+    const base = !term
+      ? memories
+      : memories.filter((memory) =>
+          `${memory.label} ${memory.content}`.toLowerCase().includes(term)
+        );
+    return [...base].sort((a, b) => {
+      if (sort === 'label') {
+        return (a.label || '').localeCompare(b.label || '');
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [memories, search, sort]);
 
   const openEditor = (memory?: any) => {
     if (memory) {
@@ -123,6 +131,28 @@ export function MemoryModal({ visible, onClose }: MemoryModalProps) {
               />
               <TouchableOpacity onPress={() => openEditor()} className="ml-3">
                 <Plus size={18} color="#60a5fa" />
+              </TouchableOpacity>
+            </View>
+            <View className="flex-row mt-3">
+              <TouchableOpacity
+                onPress={() => setSort('recent')}
+                className={`px-4 py-2 rounded-full border mr-2 ${
+                  sort === 'recent' ? 'bg-blue-600/20 border-blue-500/50' : 'bg-zinc-900 border-zinc-800'
+                }`}
+              >
+                <Text className={`text-[10px] uppercase ${sort === 'recent' ? 'text-blue-400' : 'text-zinc-500'}`}>
+                  Recent
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSort('label')}
+                className={`px-4 py-2 rounded-full border ${
+                  sort === 'label' ? 'bg-purple-600/20 border-purple-500/50' : 'bg-zinc-900 border-zinc-800'
+                }`}
+              >
+                <Text className={`text-[10px] uppercase ${sort === 'label' ? 'text-purple-300' : 'text-zinc-500'}`}>
+                  Label
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

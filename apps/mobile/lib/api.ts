@@ -396,6 +396,59 @@ export const api = {
         if (!res.ok) throw new Error('Failed to load roles');
         return await res.json();
       },
+      create: async (payload: { name: string; description?: string; permissionIds?: string[] }) => {
+        const res = await fetchWithAuth('/admin/roles', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to create role');
+        return await res.json();
+      },
+      update: async (roleId: string, payload: { name?: string; description?: string; permissionIds?: string[] }) => {
+        const res = await fetchWithAuth(`/admin/roles/${roleId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to update role');
+        return await res.json();
+      },
+      remove: async (roleId: string) => {
+        const res = await fetchWithAuth(`/admin/roles/${roleId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) throw new Error('Failed to delete role');
+        return await res.json();
+      },
+    },
+    permissions: {
+      list: async () => {
+        const res = await fetchWithAuth('/admin/permissions');
+        if (!res.ok) throw new Error('Failed to load permissions');
+        return await res.json();
+      },
+      create: async (payload: { name: string; description?: string }) => {
+        const res = await fetchWithAuth('/admin/permissions', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to create permission');
+        return await res.json();
+      },
+      update: async (permissionId: string, payload: { name?: string; description?: string }) => {
+        const res = await fetchWithAuth(`/admin/permissions/${permissionId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to update permission');
+        return await res.json();
+      },
+      remove: async (permissionId: string) => {
+        const res = await fetchWithAuth(`/admin/permissions/${permissionId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) throw new Error('Failed to delete permission');
+        return await res.json();
+      },
     },
     settings: {
       list: async () => {
@@ -409,6 +462,13 @@ export const api = {
         const res = await fetchWithAuth('/admin/organizations');
         if (!res.ok) throw new Error('Failed to load organizations');
         return await res.json();
+      },
+      structure: {
+        get: async (orgId: string) => {
+          const res = await fetchWithAuth(`/admin/organizations/${orgId}/structure`);
+          if (!res.ok) throw new Error('Failed to load org structure');
+          return await res.json();
+        },
       },
       links: {
         list: async (orgId: string) => {
@@ -512,6 +572,45 @@ export const api = {
         });
         if (!res.ok) throw new Error('Failed to delete bot');
         return await res.text();
+      },
+    },
+    ai: {
+      chats: {
+        list: async () => {
+          const res = await fetchWithAuth('/admin/ai/chats');
+          if (!res.ok) throw new Error('Failed to load AI chats');
+          return await res.json();
+        },
+        create: async (title: string) => {
+          const res = await fetchWithAuth('/admin/ai/chats', {
+            method: 'POST',
+            body: JSON.stringify({ title }),
+          });
+          if (!res.ok) throw new Error('Failed to create AI chat');
+          return await res.json();
+        },
+        remove: async (chatId: string) => {
+          const res = await fetchWithAuth(`/admin/ai/chats/${chatId}`, {
+            method: 'DELETE',
+          });
+          if (!res.ok) throw new Error('Failed to delete AI chat');
+          return await res.json();
+        },
+      },
+      messages: {
+        list: async (chatId: string) => {
+          const res = await fetchWithAuth(`/admin/ai/chat/${chatId}`);
+          if (!res.ok) throw new Error('Failed to load AI messages');
+          return await res.json();
+        },
+      },
+      send: async (payload: { prompt?: string; chatId?: string; confirmedAction?: any }) => {
+        const res = await fetchWithAuth('/admin/ai/chat', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to send AI prompt');
+        return await res.json();
       },
     },
     logs: {

@@ -2,11 +2,11 @@ import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput,
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Link2, Users, Shield, RefreshCw, Trash2, UserX } from 'lucide-react-native';
+import { ArrowLeft, Link2, Users, Shield, RefreshCw, Trash2, UserX, User } from 'lucide-react-native';
 import { api } from '../../../lib/api';
 import { Avatar } from '../../../components/ui/Avatar';
 
-type TabKey = 'links' | 'requests' | 'members' | 'overrides';
+type TabKey = 'links' | 'requests' | 'members' | 'overrides' | 'structure';
 
 export default function AdminOrganizationDetailScreen() {
   const router = useRouter();
@@ -23,6 +23,10 @@ export default function AdminOrganizationDetailScreen() {
   const [requests, setRequests] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [overrides, setOverrides] = useState<any[]>([]);
+  const [structure, setStructure] = useState<any | null>(null);
+  const [structureLoading, setStructureLoading] = useState(false);
+  const [structureError, setStructureError] = useState('');
+  const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
 
   const [linkLabel, setLinkLabel] = useState('');
   const [linkMaxUses, setLinkMaxUses] = useState('');
@@ -56,13 +60,39 @@ export default function AdminOrganizationDetailScreen() {
     }
   };
 
+  const loadStructure = async () => {
+    if (!orgId) return;
+    setStructureLoading(true);
+    setStructureError('');
+    try {
+      const data = await api.admin.organizations.structure.get(orgId);
+      setStructure(data.structure || null);
+      setCollapsedNodes({});
+    } catch (e: any) {
+      setStructure(null);
+      setStructureError(e?.message || 'Failed to load structure');
+    } finally {
+      setStructureLoading(false);
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
-  }, [orgId]);
+  }, [orgId, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'structure') {
+      loadStructure();
+    }
+  }, [activeTab, orgId]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadData();
+    if (activeTab === 'structure') {
+      loadStructure();
+    }
   }, [orgId]);
 
   const baseTitle = org?.name || 'Organization';
@@ -191,9 +221,59 @@ export default function AdminOrganizationDetailScreen() {
     }
   };
 
+  const toggleCollapse = (nodeId: string) => {
+    setCollapsedNodes((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
+  };
+
+  const renderNodeIcon = (type: string) => {
+    if (type === 'org') {
+      return <Shield size={14} color="#60a5fa" />;
+    }
+    if (type === 'role') {
+      return <Users size={14} color="#a78bfa" />;
+    }
+    return <User size={14} color="#f9a8d4" />;
+  };
+
+  const renderNode = (node: any, depth: number = 0) => {
+    if (!node) return null;
+    const children = Array.isArray(node.children) ? node.children : [];
+    const hasChildren = children.length > 0;
+    const isCollapsed = !!collapsedNodes[node.id];
+
+    return (
+      <View key={node.id || `${node.name}-${depth}`}>
+        <TouchableOpacity
+          onPress={() => hasChildren && toggleCollapse(node.id)}
+          style={{ marginLeft: depth * 16 }}
+          className="flex-row items-center py-2"
+        >
+          <View className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 items-center justify-center">
+            {renderNodeIcon(node.type)}
+          </View>
+          <View className="ml-3 flex-1">
+            <Text className="text-white text-sm font-semibold" numberOfLines={1}>
+              {node.name || 'Unknown'}
+            </Text>
+            <Text className="text-zinc-500 text-[10px] uppercase">
+              {node.type || 'node'}
+              {hasChildren ? ` · ${children.length}` : ''}
+            </Text>
+          </View>
+          {hasChildren && (
+            <Text className="text-zinc-500 text-[10px] uppercase">
+              {isCollapsed ? 'Expand' : 'Collapse'}
+            </Text>
+          )}
+        </TouchableOpacity>
+        {!isCollapsed && children.map((child: any) => renderNode(child, depth + 1))}
+      </View>
+    );
+  };
+
   const renderTabs = () => (
     <View className="flex-row flex-wrap mb-4">
-      {(['links', 'requests', 'members', 'overrides'] as TabKey[]).map((tab) => (
+      {(['links', 'requests', 'members', 'overrides', 'structure'] as TabKey[]).map((tab) => (
         <TouchableOpacity
           key={tab}
           onPress={() => setActiveTab(tab)}
@@ -410,6 +490,27 @@ export default function AdminOrganizationDetailScreen() {
                       </View>
                     </View>
                   ))
+                )}
+              </View>
+            )}
+
+            {activeTab === 'structure' && (
+              <View>
+                {structureLoading ? (
+                  <View className="items-center py-12">
+                    <ActivityIndicator size="large" color="#3b82f6" />
+                  </View>
+                ) : structureError ? (
+                  <View className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-6 items-center">
+                    <Text className="text-white text-lg font-bold">Structure Unavailable</Text>
+                    <Text className="text-zinc-500 text-sm mt-2 text-center">{structureError}</Text>
+                  </View>
+                ) : structure ? (
+                  <View className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-4">
+                    {renderNode(structure)}
+                  </View>
+                ) : (
+                  <Text className="text-zinc-500 text-sm">No structure data.</Text>
                 )}
               </View>
             )}

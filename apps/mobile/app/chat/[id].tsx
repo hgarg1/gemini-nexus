@@ -16,6 +16,15 @@ import { AssetsModal } from '../../components/AssetsModal';
 import { ShareModal } from '../../components/ShareModal';
 import { CollaborationModal } from '../../components/CollaborationModal';
 
+const reactionOptions = [
+  '\uD83D\uDC4D',
+  '\uD83D\uDD25',
+  '\u2728',
+  '\uD83D\uDCA1',
+  '\uD83D\uDE80',
+  '\u26A1',
+];
+
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -24,6 +33,10 @@ export default function ChatScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const [chatPolicy, setChatPolicy] = useState<any | null>(null);
+  const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+  const [reactionTarget, setReactionTarget] = useState<string | null>(null);
   
   const [models, setModels] = useState<any[]>([]);
   const [selectedModel, setSelectedModel] = useState("models/gemini-2.0-flash");
@@ -45,16 +58,24 @@ export default function ChatScreen() {
   });
   
   const flatListRef = useRef<FlatList>(null);
+  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
   const chatId = Array.isArray(id) ? id[0] : id;
+
+  useEffect(() => {
+    currentUserIdRef.current = currentUser?.id || null;
+  }, [currentUser]);
 
   useEffect(() => {
     if (!chatId) return;
 
     const loadData = async () => {
       try {
-        const [chatData, modelsData] = await Promise.all([
+        const [chatData, modelsData, policyData] = await Promise.all([
             api.chat.get(chatId),
-            api.models.list()
+            api.models.list(),
+            api.chat.policy().catch(() => null),
         ]);
         
         if (chatData.chat) {
@@ -84,6 +105,10 @@ export default function ChatScreen() {
         if (modelsData.models) {
             setModels(modelsData.models);
         }
+
+        if (policyData?.policy) {
+            setChatPolicy(policyData.policy);
+        }
         
         // Load initial version info to get default branch
         const versionData = await api.version.get(chatId);
@@ -102,10 +127,12 @@ export default function ChatScreen() {
     loadData();
 
     const socket = getSocket();
+    socketRef.current = socket;
     socket.emit('join-chat', chatId);
     
     api.auth.me().then(data => {
         if (data.user?.id) {
+            setCurrentUser(data.user);
             socket.emit('join-user', data.user.id);
         }
     });
@@ -127,16 +154,58 @@ export default function ChatScreen() {
     });
 
     socket.on('message-updated', (msg: any) => {
-        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: msg.content, assets: msg.assets || m.assets } : m));
+        setMessages(prev => prev.map(m => {
+            if (m.id !== msg.id) return m;
+            const baseAssets = msg.assets || m.assets;
+            let nextAssets = baseAssets;
+            if (msg.labelsByImage && Array.isArray(baseAssets)) {
+              nextAssets = baseAssets.map((asset: any) => {
+                const url = typeof asset === 'string' ? asset : asset?.url;
+                if (!url || !msg.labelsByImage[url]) return asset;
+                if (typeof asset === 'string') {
+                  return { url, labels: msg.labelsByImage[url] };
+                }
+                return { ...asset, labels: msg.labelsByImage[url] };
+              });
+            }
+            return { ...m, content: msg.content, assets: nextAssets };
+        }));
+    });
+
+    socket.on('user-typing', ({ userId, userName }) => {
+        if (!userId || userId === currentUserIdRef.current) return;
+        setTypingUsers(prev => ({ ...prev, [userId]: userName || 'Operator' }));
+    });
+
+    socket.on('user-stop-typing', ({ userId }) => {
+        if (!userId) return;
+        setTypingUsers(prev => {
+            const next = { ...prev };
+            delete next[userId];
+            return next;
+        });
+    });
+
+    socket.on('message-reaction', ({ messageId, emoji, userId, action }) => {
+        if (!messageId || !emoji || !userId || !action) return;
+        updateMessageReactions(messageId, emoji, userId, action);
     });
 
     return () => {
       socket.off('message-received');
       socket.off('message-updated');
+      socket.off('user-typing');
+      socket.off('user-stop-typing');
+      socket.off('message-reaction');
     };
   }, [chatId]);
 
   const pickImage = async () => {
+    const allowUploads = chatPolicy?.allowFileUploads ?? true;
+    if (!allowUploads) {
+      Alert.alert('Uploads Disabled', 'File uploads are restricted by policy.');
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -151,6 +220,20 @@ export default function ChatScreen() {
 
   const removeAttachment = (index: number) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateMessageReactions = (messageId: string, emoji: string, userId: string, action: string) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id !== messageId) return m;
+      const reactions = Array.isArray(m.reactions) ? m.reactions : [];
+      if (action === 'ADDED') {
+        return { ...m, reactions: [...reactions, { emoji, userId }] };
+      }
+      return {
+        ...m,
+        reactions: reactions.filter((r: any) => !(r.emoji === emoji && (r.userId || r.user?.id) === userId)),
+      };
+    }));
   };
 
   const handleUpdateConfig = async (newConfig: any) => {
@@ -181,6 +264,63 @@ export default function ChatScreen() {
     }
   };
 
+  const emitTyping = () => {
+    if (!chatId || !currentUser || !socketRef.current) return;
+    socketRef.current.emit('typing', {
+      chatId,
+      userId: currentUser.id,
+      userName: currentUser.name || currentUser.email || 'Operator',
+    });
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      socketRef.current?.emit('stop-typing', {
+        chatId,
+        userId: currentUser.id,
+      });
+    }, 2000);
+  };
+
+  const stopTyping = () => {
+    if (!chatId || !currentUser || !socketRef.current) return;
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    socketRef.current.emit('stop-typing', {
+      chatId,
+      userId: currentUser.id,
+    });
+  };
+
+  const handleMessageChange = (text: string) => {
+    setMessage(text);
+    emitTyping();
+  };
+
+  const handleReact = async (messageId: string, emoji: string) => {
+    if (!currentUser?.id) return;
+    try {
+      const data = await api.chat.react(messageId, emoji);
+      if (!data?.action) return;
+      socketRef.current?.emit('message-reaction', {
+        chatId,
+        messageId,
+        emoji,
+        userId: currentUser.id,
+        action: data.action,
+      });
+      updateMessageReactions(messageId, emoji, currentUser.id, data.action);
+    } catch (error) {
+      // Ignore for now
+    } finally {
+      setReactionTarget(null);
+    }
+  };
+
   const handleSend = async () => {
     if ((!message.trim() && attachments.length === 0) || isSending) return;
     
@@ -200,6 +340,7 @@ export default function ChatScreen() {
     setMessage('');
     setAttachments([]);
     setIsSending(true);
+    stopTyping();
 
     try {
         const history = messages.map(m => ({
@@ -225,7 +366,34 @@ export default function ChatScreen() {
                 id: res.userMessage.id,
                 time: new Date(res.userMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 assets: res.userMessage.assets || m.assets,
+                reactions: res.userMessage.reactions || [],
             } : m));
+        }
+
+        if (res.placeholderMessage) {
+            setMessages(prev => {
+                if (prev.find(m => m.id === res.placeholderMessage.id)) return prev;
+                return [
+                    ...prev,
+                    {
+                        id: res.placeholderMessage.id,
+                        role: res.placeholderMessage.role,
+                        content: res.placeholderMessage.content,
+                        time: new Date(res.placeholderMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        assets: res.placeholderMessage.assets || [],
+                        reactions: res.placeholderMessage.reactions || [],
+                    }
+                ];
+            });
+        }
+
+        if (socketRef.current && chatId) {
+            if (res.userMessage) {
+                socketRef.current.emit('new-message', { chatId, message: res.userMessage });
+            }
+            if (res.placeholderMessage) {
+                socketRef.current.emit('new-message', { chatId, message: res.placeholderMessage });
+            }
         }
 
     } catch (error) {
@@ -243,10 +411,24 @@ export default function ChatScreen() {
       return list.map((asset: any) => ({
         url: typeof asset === 'string' ? asset : asset?.url,
         role: asset?.role || message.role,
+        ratio: asset?.ratio || 'unknown',
+        labels: asset?.labels || [],
       })).filter((asset: any) => !!asset.url);
     });
   }, [messages]);
   const assetsCount = assets.length;
+  const allowUploads = chatPolicy?.allowFileUploads ?? true;
+  const allowModelSelection = chatPolicy?.allowModelSelection ?? true;
+  const allowCollaborators = chatPolicy?.allowCollaborators ?? true;
+  const allowPublicLinks = chatPolicy?.allowPublicLinks ?? true;
+  const allowCustomApiKey = chatPolicy?.allowCustomApiKey ?? true;
+  const typingNames = useMemo(() => {
+    const entries = Object.entries(typingUsers).filter(([userId]) => userId !== currentUser?.id);
+    return entries.map(([, name]) => name || 'Operator');
+  }, [typingUsers, currentUser?.id]);
+  const typingLabel = typingNames.length
+    ? `${typingNames.join(', ')} ${typingNames.length > 1 ? 'are' : 'is'} typing...`
+    : '';
 
   return (
     <View className="flex-1 bg-black">
@@ -261,8 +443,15 @@ export default function ChatScreen() {
             </TouchableOpacity>
             
             <TouchableOpacity 
-                className="flex-row items-center active:opacity-70 mr-2"
-                onPress={() => setIsModelModalOpen(true)}
+                className={`flex-row items-center active:opacity-70 mr-2 ${allowModelSelection ? '' : 'opacity-50'}`}
+                onPress={() => {
+                  if (!allowModelSelection) {
+                    Alert.alert('Model Selection Disabled', 'Model selection is restricted by policy.');
+                    return;
+                  }
+                  setIsModelModalOpen(true);
+                }}
+                disabled={!allowModelSelection}
             >
               <Avatar fallback="G" size="sm" className="bg-blue-600 mr-2" />
               <View>
@@ -288,18 +477,32 @@ export default function ChatScreen() {
              >
                 <ImageIcon size={20} color={assetsCount > 0 ? '#60a5fa' : '#a1a1aa'} />
              </TouchableOpacity>
-             <TouchableOpacity 
-                className="p-2 rounded-full active:bg-zinc-900"
-                onPress={() => setIsCollabOpen(true)}
+              <TouchableOpacity 
+                className={`p-2 rounded-full active:bg-zinc-900 ${allowCollaborators ? '' : 'opacity-50'}`}
+                onPress={() => {
+                  if (!allowCollaborators) {
+                    Alert.alert('Collaboration Disabled', 'Collaborators are restricted by policy.');
+                    return;
+                  }
+                  setIsCollabOpen(true);
+                }}
+                disabled={!allowCollaborators}
              >
-                <Users size={20} color="#a1a1aa" />
-             </TouchableOpacity>
-             <TouchableOpacity 
-                className="p-2 rounded-full active:bg-zinc-900"
-                onPress={() => setIsShareOpen(true)}
-             >
-                <Share2 size={20} color="#a1a1aa" />
-             </TouchableOpacity>
+                <Users size={20} color={allowCollaborators ? '#a1a1aa' : '#52525b'} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                className={`p-2 rounded-full active:bg-zinc-900 ${allowPublicLinks ? '' : 'opacity-50'}`}
+                onPress={() => {
+                  if (!allowPublicLinks) {
+                    Alert.alert('Sharing Disabled', 'Public links are restricted by policy.');
+                    return;
+                  }
+                  setIsShareOpen(true);
+                }}
+                disabled={!allowPublicLinks}
+              >
+                <Share2 size={20} color={allowPublicLinks ? '#a1a1aa' : '#52525b'} />
+              </TouchableOpacity>
              <TouchableOpacity 
                 className="p-2 rounded-full active:bg-zinc-900"
                 onPress={() => setIsVersionOpen(true)}
@@ -324,6 +527,7 @@ export default function ChatScreen() {
             chatTitle={chatTitle}
             onRename={handleRenameChat}
             onDelete={handleDeleteChat}
+            allowCustomApiKey={allowCustomApiKey}
         />
 
         {/* Version Modal */}
@@ -419,70 +623,103 @@ export default function ChatScreen() {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
                 onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                renderItem={({ item }) => (
-                <MotiView
-                    from={{ opacity: 0, scale: 0.9, translateY: 10 }}
-                    animate={{ opacity: 1, scale: 1, translateY: 0 }}
-                    transition={{ type: 'timing', duration: 300 }}
-                    className={`mb-6 flex-row ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                    {item.role === 'model' && (
-                    <View className="mr-2 mt-auto">
-                        <View className="w-8 h-8 rounded-full bg-blue-600/20 items-center justify-center border border-blue-500/30">
-                            <Bot size={16} color="#3b82f6" />
-                        </View>
-                    </View>
-                    )}
-                    
-                    <View 
-                    className={`max-w-[85%] rounded-2xl px-4 py-2 ${
-                        item.role === 'user' 
-                        ? 'bg-blue-600 rounded-tr-sm' 
-                        : 'bg-zinc-800 rounded-tl-sm'
-                    }`}
-                    >
-                    {Array.isArray(item.assets) && item.assets.length > 0 && (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          className="mb-2"
-                        >
-                          {item.assets.map((asset: any, assetIndex: number) => {
-                            const uri = typeof asset === 'string' ? asset : asset?.url;
-                            if (!uri) return null;
-                            return (
-                              <Image
-                                key={`${item.id}-asset-${assetIndex}`}
-                                source={{ uri }}
-                                className="w-32 h-24 rounded-lg mr-2 border border-white/10"
-                              />
-                            );
-                          })}
-                        </ScrollView>
-                    )}
-                    <Markdown
-                        style={{
-                            body: { color: item.role === 'user' ? 'white' : '#f4f4f5', fontSize: 16 },
-                            code_inline: { backgroundColor: '#3f3f46', color: '#e4e4e7', borderRadius: 4 },
-                            fence: { backgroundColor: '#18181b', color: '#e4e4e7', borderRadius: 8, marginVertical: 8 },
-                        }}
-                    >
-                        {item.content}
-                    </Markdown>
-                    <Text className={`text-[10px] mt-1 text-right ${item.role === 'user' ? 'text-blue-200' : 'text-zinc-500'}`}>
-                        {item.time}
-                    </Text>
-                    </View>
+                renderItem={({ item }) => {
+                  const reactions = (item.reactions || []).reduce((acc: any, r: any) => {
+                    const key = r.emoji;
+                    acc[key] = (acc[key] || 0) + 1;
+                    return acc;
+                  }, {});
 
-                    {item.role === 'user' && (
-                    <View className="ml-2 mt-auto">
-                        <Avatar fallback="Me" size="sm" className="w-8 h-8" />
-                    </View>
-                    )}
-                </MotiView>
-                )}
+                  return (
+                    <MotiView
+                        from={{ opacity: 0, scale: 0.9, translateY: 10 }}
+                        animate={{ opacity: 1, scale: 1, translateY: 0 }}
+                        transition={{ type: 'timing', duration: 300 }}
+                        className={`mb-6 flex-row ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                        {item.role === 'model' && (
+                        <View className="mr-2 mt-auto">
+                            <View className="w-8 h-8 rounded-full bg-blue-600/20 items-center justify-center border border-blue-500/30">
+                                <Bot size={16} color="#3b82f6" />
+                            </View>
+                        </View>
+                        )}
+                        
+                        <View 
+                        className={`max-w-[85%] rounded-2xl px-4 py-2 ${
+                            item.role === 'user' 
+                            ? 'bg-blue-600 rounded-tr-sm' 
+                            : 'bg-zinc-800 rounded-tl-sm'
+                        }`}
+                        >
+                        {Array.isArray(item.assets) && item.assets.length > 0 && (
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                              className="mb-2"
+                            >
+                              {item.assets.map((asset: any, assetIndex: number) => {
+                                const uri = typeof asset === 'string' ? asset : asset?.url;
+                                if (!uri) return null;
+                                return (
+                                  <Image
+                                    key={`${item.id}-asset-${assetIndex}`}
+                                    source={{ uri }}
+                                    className="w-32 h-24 rounded-lg mr-2 border border-white/10"
+                                  />
+                                );
+                              })}
+                            </ScrollView>
+                        )}
+                        <Markdown
+                            style={{
+                                body: { color: item.role === 'user' ? 'white' : '#f4f4f5', fontSize: 16 },
+                                code_inline: { backgroundColor: '#3f3f46', color: '#e4e4e7', borderRadius: 4 },
+                                fence: { backgroundColor: '#18181b', color: '#e4e4e7', borderRadius: 8, marginVertical: 8 },
+                            }}
+                        >
+                            {item.content}
+                        </Markdown>
+                        <Text className={`text-[10px] mt-1 text-right ${item.role === 'user' ? 'text-blue-200' : 'text-zinc-500'}`}>
+                            {item.time}
+                        </Text>
+                        <View className={`flex-row flex-wrap items-center mt-2 ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          {Object.entries(reactions).map(([emoji, count]) => (
+                            <TouchableOpacity
+                              key={`${item.id}-${emoji}`}
+                              onPress={() => handleReact(item.id, emoji)}
+                              className="px-2 py-1 rounded-full bg-black/40 border border-zinc-700 mr-2 mb-2"
+                            >
+                              <Text className="text-xs text-white">
+                                {emoji} {count}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity
+                            onPress={() => setReactionTarget(item.id)}
+                            className="px-2 py-1 rounded-full bg-black/40 border border-zinc-700 mb-2"
+                          >
+                            <Text className="text-xs text-zinc-300">+</Text>
+                          </TouchableOpacity>
+                        </View>
+                        </View>
+
+                        {item.role === 'user' && (
+                        <View className="ml-2 mt-auto">
+                            <Avatar fallback="Me" size="sm" className="w-8 h-8" />
+                        </View>
+                        )}
+                    </MotiView>
+                  );
+                }}
             />
           )}
+
+          {typingLabel ? (
+            <View className="px-4 pb-2">
+              <Text className="text-zinc-500 text-xs">{typingLabel}</Text>
+            </View>
+          ) : null}
 
           {/* Attachment Previews */}
           {attachments.length > 0 && (
@@ -506,15 +743,16 @@ export default function ChatScreen() {
             <View className="flex-row items-end space-x-2">
               <TouchableOpacity 
                 onPress={pickImage}
-                className="p-3 bg-zinc-900 rounded-full mb-[1px]"
+                disabled={!allowUploads}
+                className={`p-3 bg-zinc-900 rounded-full mb-[1px] ${allowUploads ? '' : 'opacity-50'}`}
               >
-                <Paperclip size={20} color="#a1a1aa" />
+                <Paperclip size={20} color={allowUploads ? '#a1a1aa' : '#52525b'} />
               </TouchableOpacity>
               
               <View className="flex-1 bg-zinc-900 rounded-2xl px-4 py-3 border border-zinc-800 focus:border-blue-500/50 min-h-[50px] justify-center">
                 <TextInput
                   value={message}
-                  onChangeText={setMessage}
+                  onChangeText={handleMessageChange}
                   placeholder="Message..."
                   placeholderTextColor="#71717a"
                   multiline
@@ -537,6 +775,18 @@ export default function ChatScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+
+        <Modal visible={!!reactionTarget} transparent animationType="fade" onRequestClose={() => setReactionTarget(null)}>
+          <View className="flex-1 bg-black/60 items-center justify-center">
+            <View className="flex-row bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 space-x-3">
+              {reactionOptions.map((emoji) => (
+                <TouchableOpacity key={emoji} onPress={() => reactionTarget && handleReact(reactionTarget, emoji)}>
+                  <Text className="text-2xl">{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </View>
   );

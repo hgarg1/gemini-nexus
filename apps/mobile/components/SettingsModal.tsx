@@ -18,6 +18,7 @@ interface SettingsModalProps {
   chatTitle: string;
   onRename: (newTitle: string) => void;
   onDelete: () => void;
+  allowCustomApiKey?: boolean;
 }
 
 export function SettingsModal({ 
@@ -27,7 +28,8 @@ export function SettingsModal({
   onUpdateConfig, 
   chatTitle, 
   onRename, 
-  onDelete 
+  onDelete,
+  allowCustomApiKey = true,
 }: SettingsModalProps) {
   const [localConfig, setLocalConfig] = useState(config);
   const [localTitle, setLocalTitle] = useState(chatTitle);
@@ -143,8 +145,14 @@ export function SettingsModal({
                                 placeholder="ENTER_PRIVATE_KEY..."
                                 placeholderTextColor="#52525b"
                                 secureTextEntry
-                                className="text-white text-base font-mono border-b border-zinc-700 pb-2"
+                                editable={allowCustomApiKey}
+                                className={`text-white text-base font-mono border-b border-zinc-700 pb-2 ${allowCustomApiKey ? '' : 'opacity-50'}`}
                             />
+                            {!allowCustomApiKey && (
+                              <Text className="text-zinc-600 text-[10px] mt-2">
+                                Custom API keys are disabled by policy.
+                              </Text>
+                            )}
                         </View>
                     </View>
 

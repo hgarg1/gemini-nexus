@@ -23,6 +23,7 @@ export default function ProfileScreen() {
   const [editPhone, setEditPhone] = useState("");
   const [editApiKey, setEditApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [activeOrgUpdating, setActiveOrgUpdating] = useState<string | null>(null);
 
   useEffect(() => {
     loadUser();
@@ -95,6 +96,19 @@ export default function ProfileScreen() {
     });
     setIsSaving(false);
     setIsEditModalOpen(false);
+  };
+
+  const handleSetActiveOrg = async (orgId: string) => {
+    if (user?.activeOrgId === orgId) return;
+    setActiveOrgUpdating(orgId);
+    try {
+      const res = await api.auth.update({ activeOrgId: orgId });
+      if (res.user) setUser(res.user);
+    } catch (e) {
+      Alert.alert("Error", "Failed to update active organization");
+    } finally {
+      setActiveOrgUpdating(null);
+    }
   };
 
   const openEditModal = () => {
@@ -224,31 +238,43 @@ export default function ProfileScreen() {
                     <Text className="text-zinc-500 text-sm">No active sectors</Text>
                 </View>
             ) : (
-                memberships.map((membership, index) => (
-                    <View
-                        key={membership.organization.id}
-                        className={`flex-row items-center p-4 ${index < memberships.length - 1 ? 'border-b border-zinc-800' : ''}`}
-                    >
-                        <Avatar
-                            uri={membership.organization.logo}
-                            fallback={membership.organization.name?.[0] || 'O'}
-                            size="md"
-                        />
-                        <View className="flex-1 ml-3">
-                            <Text className="text-white text-sm font-semibold" numberOfLines={1}>
-                                {membership.organization.name}
-                            </Text>
-                            <Text className="text-zinc-500 text-xs" numberOfLines={1}>
-                                {membership.role?.name || 'MEMBER'}
-                            </Text>
-                        </View>
-                        {user?.activeOrgId === membership.organization.id && (
-                            <View className="px-2 py-1 rounded-full bg-blue-500/20 border border-blue-500/30">
-                                <Text className="text-blue-400 text-[10px] font-bold">ACTIVE</Text>
+                memberships.map((membership, index) => {
+                    const orgId = membership.organization.id;
+                    const isActive = user?.activeOrgId === orgId;
+                    const isUpdating = activeOrgUpdating === orgId;
+                    return (
+                        <TouchableOpacity
+                            key={orgId}
+                            onPress={() => handleSetActiveOrg(orgId)}
+                            className={`flex-row items-center p-4 ${index < memberships.length - 1 ? 'border-b border-zinc-800' : ''}`}
+                        >
+                            <Avatar
+                                uri={membership.organization.logo}
+                                fallback={membership.organization.name?.[0] || 'O'}
+                                size="md"
+                            />
+                            <View className="flex-1 ml-3">
+                                <Text className="text-white text-sm font-semibold" numberOfLines={1}>
+                                    {membership.organization.name}
+                                </Text>
+                                <Text className="text-zinc-500 text-xs" numberOfLines={1}>
+                                    {membership.role?.name || 'MEMBER'}
+                                </Text>
                             </View>
-                        )}
-                    </View>
-                ))
+                            {isActive ? (
+                                <View className="px-2 py-1 rounded-full bg-blue-500/20 border border-blue-500/30">
+                                    <Text className="text-blue-400 text-[10px] font-bold">ACTIVE</Text>
+                                </View>
+                            ) : isUpdating ? (
+                                <ActivityIndicator size="small" color="#60a5fa" />
+                            ) : (
+                                <Text className="text-zinc-500 text-[10px] uppercase tracking-widest">
+                                    Set Active
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })
             )}
           </View>
 

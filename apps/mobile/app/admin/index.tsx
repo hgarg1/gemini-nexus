@@ -2,7 +2,7 @@ import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'rea
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ShieldCheck, Users, Activity, ArrowLeft, Layers, Building2, Settings, Bot, MessageSquare } from 'lucide-react-native';
+import { ShieldCheck, Users, Activity, ArrowLeft, Layers, Building2, Settings, Bot, MessageSquare, Cpu } from 'lucide-react-native';
 import { api } from '../../lib/api';
 
 export default function AdminOverviewScreen() {
@@ -115,6 +115,13 @@ export default function AdminOverviewScreen() {
               >
                 <Bot size={20} color="#22c55e" />
                 <Text className="text-white font-semibold ml-3">Bots Registry</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/admin/ai')}
+                className="flex-row items-center p-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl"
+              >
+                <Cpu size={20} color="#60a5fa" />
+                <Text className="text-white font-semibold ml-3">Admin AI</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => router.push('/admin/logs')}

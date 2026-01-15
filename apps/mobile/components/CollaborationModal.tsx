@@ -5,6 +5,7 @@ import { Users, X, MessageSquare, Link2, Search, Plus, ArrowLeft, Send, Papercli
 import Markdown from 'react-native-markdown-display';
 import * as ImagePicker from 'expo-image-picker';
 import { api, API_BASE_URL } from '../lib/api';
+import { getSocket } from '../lib/socket';
 import { Avatar } from './ui/Avatar';
 import { AppearanceModal } from './AppearanceModal';
 
@@ -62,6 +63,7 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
   const [me, setMe] = useState<any | null>(null);
 
   const listRef = useRef<FlatList>(null);
+  const socketRef = useRef<ReturnType<typeof getSocket> | null>(null);
   const baseUrl = useMemo(() => API_BASE_URL.replace(/\/api$/, ''), []);
 
   useEffect(() => {
@@ -76,6 +78,56 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
     loadConnections();
     loadMe();
   }, [visible, chatId]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const socket = getSocket();
+    socketRef.current = socket;
+
+    const handleDirectMessage = (message: any) => {
+      if (!message?.id || !activeUser?.id) return;
+      const otherId = message.senderId === me?.id ? message.receiverId : message.senderId;
+      if (otherId !== activeUser.id) return;
+      setMessages((prev) => {
+        if (prev.find((m) => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
+    };
+
+    const handleReactionEvent = ({ messageId, emoji, userId, action }: any) => {
+      if (!messageId || !emoji || !userId || !action) return;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m;
+          const reactions = m.reactions || [];
+          if (action === 'ADDED') {
+            return { ...m, reactions: [...reactions, { emoji, userId }] };
+          }
+          return {
+            ...m,
+            reactions: reactions.filter(
+              (r: any) => !(r.emoji === emoji && (r.userId || r.user?.id) === userId)
+            ),
+          };
+        })
+      );
+    };
+
+    socket.on('direct-message', handleDirectMessage);
+    socket.on('message-reaction', handleReactionEvent);
+
+    return () => {
+      socket.off('direct-message', handleDirectMessage);
+      socket.off('message-reaction', handleReactionEvent);
+    };
+  }, [visible, activeUser?.id, me?.id]);
+
+  useEffect(() => {
+    if (!visible || !me?.id) return;
+    const socket = socketRef.current ?? getSocket();
+    socketRef.current = socket;
+    socket.emit('join-user', me.id);
+  }, [visible, me?.id]);
 
   useEffect(() => {
     if (!directoryQuery.trim()) {
@@ -132,6 +184,7 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
   };
 
   const fetchDirectoryUsers = async (query: string) => {
+    if (!allowDirectMessages) return;
     setDirectoryLoading(true);
     try {
       const data = await api.collaboration.users.search(query);
@@ -144,6 +197,10 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
   };
 
   const openThread = async (user: any) => {
+    if (!allowDirectMessages) {
+      Alert.alert('Direct Messages Disabled', 'Direct messages are restricted by policy.');
+      return;
+    }
     setActiveUser(user);
     setMessages([]);
     setMessagesLoading(true);
@@ -202,7 +259,6 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
   };
 
   const pickImage = async () => {
-    const allowUploads = policy?.allowFileUploads ?? true;
     if (!allowUploads) {
       Alert.alert('Uploads Disabled', 'File uploads are restricted by policy.');
       return;
@@ -227,6 +283,10 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
   };
 
   const handleSend = async () => {
+    if (!allowDirectMessages) {
+      Alert.alert('Direct Messages Disabled', 'Direct messages are restricted by policy.');
+      return;
+    }
     if (!activeUser || (!draft.trim() && attachments.length === 0) || sending) return;
     if (activeUser.id === me?.id) {
       Alert.alert('Invalid Target', 'You cannot message yourself.');
@@ -257,6 +317,10 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
       });
       if (data.message) {
         setMessages((prev) => prev.map((m) => (m.id === tempId ? data.message : m)));
+        socketRef.current?.emit('direct-message', {
+          recipientId: activeUser.id,
+          message: data.message,
+        });
       }
     } catch (e) {
       Alert.alert('Error', 'Failed to send message');
@@ -270,6 +334,15 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
     try {
       const data = await api.collaboration.messages.react(messageId, emoji);
       const action = data.action;
+      if (action && activeUser && me?.id) {
+        socketRef.current?.emit('message-reaction', {
+          recipientId: activeUser.id,
+          messageId,
+          emoji,
+          userId: me.id,
+          action,
+        });
+      }
       setMessages((prev) =>
         prev.map((m) => {
           if (m.id !== messageId) return m;
@@ -294,6 +367,10 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
 
   const handleDeleteThread = async () => {
     if (!activeUser) return;
+    if (!allowDeleteThreads) {
+      Alert.alert('Restricted', 'Thread deletion is disabled by policy.');
+      return;
+    }
     Alert.alert('Delete Thread', 'Delete this conversation and all messages?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -348,6 +425,9 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
     return connections.filter((c) => (c.name || '').toLowerCase().includes(term));
   }, [connections, directoryQuery]);
 
+  const allowDirectMessages = policy?.allowDirectMessages ?? true;
+  const allowDeleteThreads = policy?.allowDeleteThreads ?? true;
+  const allowUploads = policy?.allowFileUploads ?? true;
   const activeCount = links.filter((link) => link.active).length;
   const bubbleColor = appearance?.bubbleColor || '#00f2ff';
   const bubbleBackground = hexToRgba(bubbleColor, 0.15);
@@ -467,7 +547,13 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
             </ScrollView>
           ) : (
             <View className="flex-1">
-              {activeUser ? (
+              {!allowDirectMessages ? (
+                <View className="flex-1 items-center justify-center px-6">
+                  <Text className="text-zinc-500 text-sm text-center">
+                    Direct messages are disabled by policy.
+                  </Text>
+                </View>
+              ) : activeUser ? (
                 <KeyboardAvoidingView
                   behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                   className="flex-1"
@@ -485,8 +571,12 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
                       <TouchableOpacity onPress={() => setIsAppearanceOpen(true)} className="p-2 rounded-full bg-zinc-900">
                         <Settings size={16} color="#a1a1aa" />
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={handleDeleteThread} className="p-2 rounded-full bg-zinc-900">
-                        <Trash2 size={16} color="#f87171" />
+                      <TouchableOpacity
+                        onPress={handleDeleteThread}
+                        disabled={!allowDeleteThreads}
+                        className={`p-2 rounded-full bg-zinc-900 ${allowDeleteThreads ? '' : 'opacity-50'}`}
+                      >
+                        <Trash2 size={16} color={allowDeleteThreads ? '#f87171' : '#52525b'} />
                       </TouchableOpacity>
                       <TouchableOpacity onPress={handleBlockUser} className="p-2 rounded-full bg-zinc-900">
                         <UserX size={16} color="#f87171" />
@@ -592,8 +682,12 @@ export function CollaborationModal({ visible, onClose, chatId }: CollaborationMo
 
                   <View className="px-4 py-3 border-t border-zinc-900 bg-black">
                     <View className="flex-row items-end space-x-2">
-                      <TouchableOpacity onPress={pickImage} className="p-3 bg-zinc-900 rounded-full mb-[1px]">
-                        <Paperclip size={20} color="#a1a1aa" />
+                      <TouchableOpacity
+                        onPress={pickImage}
+                        disabled={!allowUploads}
+                        className={`p-3 bg-zinc-900 rounded-full mb-[1px] ${allowUploads ? '' : 'opacity-50'}`}
+                      >
+                        <Paperclip size={20} color={allowUploads ? '#a1a1aa' : '#52525b'} />
                       </TouchableOpacity>
                       <View className="flex-1 bg-zinc-900 rounded-2xl px-4 py-3 border border-zinc-800 min-h-[50px] justify-center">
                         <TextInput
