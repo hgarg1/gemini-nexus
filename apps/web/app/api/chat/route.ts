@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = (user as any).id;
 
     const chats = await prisma.chat.findMany({
       where: {
@@ -25,10 +24,23 @@ export async function GET(req: NextRequest) {
         title: true,
         updatedAt: true,
         userId: true,
+        messages: {
+           take: 1,
+           orderBy: { createdAt: 'desc' },
+           select: { content: true }
+        }
       }
     });
 
-    return NextResponse.json({ chats });
+    const formattedChats = chats.map(chat => ({
+        id: chat.id,
+        name: chat.title,
+        updatedAt: chat.updatedAt,
+        message: chat.messages[0]?.content || "No messages yet",
+        // Add avatars if we had bot info, for now use placeholders or fetch bot relation
+    }));
+
+    return NextResponse.json({ chats: formattedChats });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -36,12 +48,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = (user as any).id;
     const { title, config, botId } = await req.json();
 
     const chat = await prisma.chat.create({

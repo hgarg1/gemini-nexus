@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { MotiView } from 'moti';
@@ -6,17 +6,63 @@ import { Search, Plus, Zap } from 'lucide-react-native';
 import { Input } from '../../components/ui/Input';
 import { Avatar } from '../../components/ui/Avatar';
 import { useRouter } from 'expo-router';
-
-const DUMMY_CHATS = [
-  { id: '1', name: 'Gemini Pro', message: 'I can help you analyze that code.', time: '2m', avatar: null, unread: 2 },
-  { id: '2', name: 'Sarah Connor', message: 'The deployment is ready.', time: '1h', avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026024d', unread: 0 },
-  { id: '3', name: 'Team Alpha', message: 'Alex: Just merged the PR.', time: '3h', avatar: null, unread: 0 },
-  { id: '4', name: 'Marketing Bot', message: 'New campaign stats are in.', time: '1d', avatar: null, unread: 5 },
-  { id: '5', name: 'Design Team', message: 'Can we review the Figma?', time: '2d', avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026704d', unread: 0 },
-];
+import { useState, useEffect, useCallback } from 'react';
+import { api } from '../../lib/api';
 
 export default function ChatListScreen() {
   const router = useRouter();
+  const [chats, setChats] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchChats = async () => {
+    try {
+      const data = await api.chat.list();
+      setChats(data.chats || []);
+    } catch (error) {
+      console.error('Failed to fetch chats:', error);
+      // Optional: Alert.alert("Error", "Could not load chats");
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchChats();
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchChats();
+  }, []);
+
+  const handleCreateChat = async () => {
+    try {
+        const data = await api.chat.create();
+        if (data.chat?.id) {
+            router.push(`/chat/${data.chat.id}`);
+        }
+    } catch (error) {
+        Alert.alert("Error", "Failed to create new chat");
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    // If less than 24 hours
+    if (diff < 86400000) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    // If less than 7 days
+    if (diff < 604800000) {
+        return date.toLocaleDateString([], { weekday: 'short' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
 
   return (
     <View className="flex-1 bg-black">
@@ -30,8 +76,8 @@ export default function ChatListScreen() {
             <Text className="text-3xl font-bold text-white">Chats</Text>
           </View>
           <TouchableOpacity 
-            className="w-12 h-12 bg-zinc-800 rounded-full items-center justify-center border border-zinc-700"
-            onPress={() => {}}
+            className="w-12 h-12 bg-zinc-800 rounded-full items-center justify-center border border-zinc-700 active:bg-zinc-700"
+            onPress={handleCreateChat}
           >
             <Plus size={24} color="white" />
           </TouchableOpacity>
@@ -46,62 +92,62 @@ export default function ChatListScreen() {
           />
         </View>
 
-        {/* Stories / Quick Access (Optional fancy touch) */}
+        {/* Stories / Quick Access */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="pl-6 mb-8 max-h-24">
-          <View className="mr-6 items-center space-y-2">
+          <TouchableOpacity onPress={handleCreateChat} className="mr-6 items-center space-y-2">
             <View className="w-16 h-16 rounded-full bg-blue-600 items-center justify-center border-2 border-blue-400 border-dashed">
               <Zap size={28} color="white" fill="white" />
             </View>
             <Text className="text-white text-xs font-medium">New</Text>
-          </View>
-          {DUMMY_CHATS.map((chat) => (
-            <TouchableOpacity key={chat.id} className="mr-6 items-center space-y-2">
-              <Avatar 
-                uri={chat.avatar || undefined} 
-                fallback={chat.name[0]} 
-                size="lg" 
-                className="border-2 border-zinc-800"
-              />
-              <Text className="text-zinc-400 text-xs font-medium w-16 text-center" numberOfLines={1}>{chat.name}</Text>
-            </TouchableOpacity>
-          ))}
+          </TouchableOpacity>
+          {/* We could populate this with favorited bots or recent active contacts later */}
         </ScrollView>
 
         {/* Chat List */}
-        <ScrollView contentContainerStyle={{ paddingBottom: 100 }} className="px-6">
-          <Text className="text-white font-bold text-lg mb-4">Recent</Text>
-          {DUMMY_CHATS.map((chat, index) => (
-            <MotiView
-              key={chat.id}
-              from={{ opacity: 0, translateY: 20 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ delay: index * 100 }}
+        {isLoading ? (
+            <View className="flex-1 items-center justify-center">
+                <ActivityIndicator size="large" color="#3b82f6" />
+            </View>
+        ) : (
+            <ScrollView 
+                contentContainerStyle={{ paddingBottom: 100 }} 
+                className="px-6"
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />
+                }
             >
-              <TouchableOpacity 
-                className="flex-row items-center py-4 border-b border-zinc-900/50 active:bg-zinc-900/30 -mx-2 px-2 rounded-xl"
-                onPress={() => router.push(`/chat/${chat.id}`)}
-              >
-                <Avatar uri={chat.avatar || undefined} fallback={chat.name[0]} size="lg" />
-                
-                <View className="flex-1 ml-4">
-                  <View className="flex-row justify-between items-center mb-1">
-                    <Text className="text-white font-bold text-base">{chat.name}</Text>
-                    <Text className="text-zinc-500 text-xs">{chat.time}</Text>
-                  </View>
-                  <Text className="text-zinc-400 text-sm" numberOfLines={1}>
-                    {chat.message}
-                  </Text>
-                </View>
-
-                {chat.unread > 0 && (
-                  <View className="ml-2 w-5 h-5 bg-blue-500 rounded-full items-center justify-center">
-                    <Text className="text-white text-[10px] font-bold">{chat.unread}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </MotiView>
-          ))}
-        </ScrollView>
+              <Text className="text-white font-bold text-lg mb-4">Recent</Text>
+              {chats.length === 0 ? (
+                  <Text className="text-zinc-500 text-center mt-10">No chats yet. Start a new one!</Text>
+              ) : (
+                  chats.map((chat, index) => (
+                    <MotiView
+                      key={chat.id}
+                      from={{ opacity: 0, translateY: 20 }}
+                      animate={{ opacity: 1, translateY: 0 }}
+                      transition={{ delay: index * 50 }}
+                    >
+                      <TouchableOpacity 
+                        className="flex-row items-center py-4 border-b border-zinc-900/50 active:bg-zinc-900/30 -mx-2 px-2 rounded-xl"
+                        onPress={() => router.push(`/chat/${chat.id}`)}
+                      >
+                        <Avatar fallback={(chat.name || "N")[0]} size="lg" />
+                        
+                        <View className="flex-1 ml-4">
+                          <View className="flex-row justify-between items-center mb-1">
+                            <Text className="text-white font-bold text-base" numberOfLines={1}>{chat.name}</Text>
+                            <Text className="text-zinc-500 text-xs">{formatTime(chat.updatedAt)}</Text>
+                          </View>
+                          <Text className="text-zinc-400 text-sm" numberOfLines={1}>
+                            {chat.message}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    </MotiView>
+                  ))
+              )}
+            </ScrollView>
+        )}
 
       </SafeAreaView>
     </View>
