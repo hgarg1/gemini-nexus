@@ -1,63 +1,64 @@
-# Stage 1: Build (Debian slim)
-FROM node:22-bookworm-slim AS build
+# Stage 1: Build
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 ENV npm_config_optional=true
 ENV npm_config_ignore_optional=false
-RUN corepack enable
-RUN corepack prepare npm@11.7.0 --activate
-# (Optional but recommended) CA certs for fetching deps + prisma engines cleanly
+
+# Install required system dependencies (OpenSSL is critical for Prisma)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
     ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy root lockfiles for dependency resolution
-COPY package.json package-lock.json ./
+# Enable corepack for correct npm version
+RUN corepack enable
 
-# Copy workspace folders to preserve structure
-COPY apps/web ./apps/web
-COPY packages ./packages
-# You were copying prisma schema into /prisma; keep that behavior
-COPY packages/database/prisma ./prisma
+# Copy source code
+COPY . .
 
-# Install dependencies for the whole repo
+# Install dependencies
+# We use --include=optional to ensure platform specific binaries (like @swc/core, prisma engines) are installed
 RUN npm ci --include=optional \
- && npm i -D @tailwindcss/oxide-linux-x64-gnu@4.1.18 # Fix for Tailwind on Debian-based images
-# Generate Prisma client and build only the web app
-RUN npx prisma generate
+    && npm i -D @tailwindcss/oxide-linux-x64-gnu@4.1.18
+
+# Generate Prisma Client
+# We use the root script which delegates to turbo to run it in the correct package context
+RUN npm run db:generate
+
+# Build the web application
+# This will generate the .next/standalone folder due to output: "standalone" in next.config.js
 RUN npm run build --workspace=apps/web
 
-
-# Stage 2: Runtime (Debian slim)
-FROM node:22-bookworm-slim AS runtime
+# Stage 2: Production Runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN corepack enable
-RUN corepack prepare npm@11.7.0 --activate
 
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
     ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
-# Install only production deps for the web app (as you were doing)
-COPY --from=build /app/apps/web/package.json ./package.json
-COPY --from=build /app/package-lock.json ./package-lock.json
-RUN npm ci --omit=dev
+# Don't run as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Copy built Next.js artifacts
-COPY --from=build /app/apps/web/.next ./.next
-COPY --from=build /app/apps/web/public ./public
-COPY --from=build /app/apps/web/scripts ./scripts
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
 
-# Copy Prisma engine directory produced during build (used by @prisma/client at runtime)
-# This matches your existing approach.
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+# Copy the standalone build from the builder stage
+# The standalone folder contains a minimal node_modules and the server code
+# We copy it to /app, preserving the apps/web structure inside
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
-# If your app expects the Prisma schema/migrations at runtime (often not needed),
-# uncomment the next line:
-# COPY --from=build /app/prisma ./prisma
+USER nextjs
 
-RUN chmod +x ./scripts/docker-entrypoint.sh
 EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-ENTRYPOINT ["./scripts/docker-entrypoint.sh"]
-CMD ["npm", "start"]
+CMD ["node", "apps/web/server.js"]

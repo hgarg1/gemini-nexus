@@ -5,7 +5,7 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Key, ArrowLeft, CheckCircle2, AlertTriangle } from 'lucide-react-native';
+import { Key, CheckCircle2, AlertTriangle } from 'lucide-react-native';
 import { useState } from 'react';
 
 type Status = 'idle' | 'loading' | 'success';

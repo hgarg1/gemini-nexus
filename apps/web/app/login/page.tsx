@@ -165,7 +165,7 @@ function LoginPageContent() {
                   "cyber-input w-full transition-all",
                   errors.password && "border-accent/50 bg-accent/5"
                 )}
-                placeholder="••••••••••••"
+                placeholder="Enter password"
               />
             </div>
 

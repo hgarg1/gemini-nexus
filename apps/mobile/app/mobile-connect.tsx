@@ -85,7 +85,7 @@ export default function MobileConnectScreen() {
             <Button
               label="Auto-Configure Terminal"
               className="mt-6"
-              icon={<Terminal size={18} color="black" />}
+              icon={<Terminal size={18} color="white" />}
               onPress={handleOpen}
               disabled={!apiKey}
             />

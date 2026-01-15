@@ -86,7 +86,7 @@ export default function LoginScreen() {
                 onChangeText={setEmail}
               />
               <Input 
-                placeholder="••••••••" 
+                placeholder="Enter password" 
                 label="Password"
                 secureTextEntry
                 icon={<Lock size={20} color="#a1a1aa" />}
