@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, ScrollView, Alert, Modal, TextInput, Acti
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Avatar } from '../../components/ui/Avatar';
-import { Settings, LogOut, ChevronRight, User, Bell, Shield, X, Save, Edit2, Camera } from 'lucide-react-native';
+import { Settings, LogOut, ChevronRight, User, Bell, Shield, X, Save, Edit2, Camera, Building2, Unlock, Link as LinkIcon } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import { api, removeToken } from '../../lib/api';
@@ -14,9 +14,13 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  const [blockedLoading, setBlockedLoading] = useState(false);
   
   // Edit State
   const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
   const [editApiKey, setEditApiKey] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -25,15 +29,21 @@ export default function ProfileScreen() {
   }, []);
 
   const loadUser = async () => {
+    setBlockedLoading(true);
     try {
-      const data = await api.auth.me();
+      const [data, blocked] = await Promise.all([
+        api.auth.me(),
+        api.user.blocked.list().catch(() => ({ blockedUsers: [] })),
+      ]);
       if (data.user) setUser(data.user);
+      if (blocked.blockedUsers) setBlockedUsers(blocked.blockedUsers);
     } catch (e) {
       console.error(e);
       // If auth fails, redirect to login
       removeToken().then(() => router.replace('/(auth)/login'));
     } finally {
       setIsLoading(false);
+      setBlockedLoading(false);
     }
   };
 
@@ -66,10 +76,21 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleUnblock = async (targetId: string) => {
+    try {
+      await api.user.blocked.unblock(targetId);
+      setBlockedUsers(prev => prev.filter(user => user.id !== targetId));
+    } catch (e) {
+      Alert.alert("Error", "Failed to unblock user");
+    }
+  };
+
   const handleSaveEdit = async () => {
     setIsSaving(true);
     await updateUser({ 
         name: editName,
+        email: editEmail,
+        phone: editPhone,
         apiKey: editApiKey
     });
     setIsSaving(false);
@@ -78,9 +99,13 @@ export default function ProfileScreen() {
 
   const openEditModal = () => {
     setEditName(user?.name || "");
+    setEditEmail(user?.email || "");
+    setEditPhone(user?.phone || "");
     setEditApiKey(user?.apiKey || "");
     setIsEditModalOpen(true);
   };
+
+  const memberships = Array.isArray(user?.memberships) ? user.memberships : [];
 
   if (isLoading) {
       return (
