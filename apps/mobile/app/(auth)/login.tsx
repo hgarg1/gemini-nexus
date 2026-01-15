@@ -1,4 +1,4 @@
-import { View, Text, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { MotiView, MotiText } from 'moti';
@@ -8,18 +8,29 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Mail, Lock, Zap } from 'lucide-react-native';
 import { useState } from 'react';
+import { api } from '../../lib/api';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await api.auth.login(email, password);
       router.replace('/(tabs)');
-    }, 1500);
+    } catch (error) {
+      Alert.alert('Login Failed', 'Invalid email or password');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -71,12 +82,16 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon={<Mail size={20} color="#a1a1aa" />}
+                value={email}
+                onChangeText={setEmail}
               />
               <Input 
                 placeholder="••••••••" 
                 label="Password"
                 secureTextEntry
                 icon={<Lock size={20} color="#a1a1aa" />}
+                value={password}
+                onChangeText={setPassword}
               />
               
               <View className="items-end mb-4">
