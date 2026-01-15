@@ -1,18 +1,17 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 
 const MAX_IMAGE_LENGTH = 2_500_000;
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+export async function GET(req: NextRequest) {
+  const user = await getSessionUser(req);
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: (session.user as any).id },
+  const dbUser = await prisma.user.findUnique({
+    where: { id: (user as any).id },
     select: {
       id: true,
       name: true,
@@ -21,6 +20,7 @@ export async function GET() {
       image: true,
       activeOrgId: true,
       notificationSettings: true,
+      apiKey: true,
       memberships: {
         select: {
           organization: {
@@ -40,13 +40,13 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({ user });
+  return NextResponse.json({ user: dbUser });
 }
 
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -60,6 +60,7 @@ export async function PATCH(req: Request) {
       typeof body.notificationSettings === "object" && body.notificationSettings !== null
         ? body.notificationSettings
         : undefined;
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey : body.apiKey === null ? null : undefined;
 
     if (name !== undefined && name.length < 2) {
       return NextResponse.json({ error: "Name must be at least 2 characters" }, { status: 400 });
@@ -74,7 +75,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Image is too large" }, { status: 413 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = (user as any).id;
 
     if (email) {
       const existing = await prisma.user.findUnique({ where: { email } });
@@ -90,6 +91,7 @@ export async function PATCH(req: Request) {
       image?: string | null;
       activeOrgId?: string | null;
       notificationSettings?: any;
+      apiKey?: string | null;
     } = {};
 
     if (name !== undefined) data.name = name;
@@ -97,6 +99,7 @@ export async function PATCH(req: Request) {
     if (phoneRaw !== undefined) data.phone = phoneRaw.length ? phoneRaw : null;
     if (image !== undefined) data.image = image;
     if (notificationSettings !== undefined) data.notificationSettings = notificationSettings;
+    if (apiKey !== undefined) data.apiKey = apiKey;
 
     if (activeOrgId !== undefined) {
       if (activeOrgId) {
@@ -111,7 +114,7 @@ export async function PATCH(req: Request) {
       data.activeOrgId = activeOrgId;
     }
 
-    const user = await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: userId },
       data,
       select: {
@@ -122,10 +125,11 @@ export async function PATCH(req: Request) {
         image: true,
         activeOrgId: true,
         notificationSettings: true,
+        apiKey: true
       },
     });
 
-    return NextResponse.json({ user });
+    return NextResponse.json({ user: updatedUser });
   } catch (error: any) {
     console.error("USER_UPDATE_ERROR", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

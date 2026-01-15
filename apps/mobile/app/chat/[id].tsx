@@ -1,7 +1,7 @@
-import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Image, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, MoreVertical, Send, Paperclip, Bot, User, X } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Send, Paperclip, Bot, User, X, ChevronDown, Check, GitBranch } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { useState, useRef, useEffect } from 'react';
 import { MotiView } from 'moti';
@@ -11,6 +11,8 @@ import { getSocket } from '../../lib/socket';
 import Markdown from 'react-native-markdown-display';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { SettingsModal } from '../../components/SettingsModal';
+import { VersionModal } from '../../components/VersionModal';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
@@ -19,33 +21,77 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [attachments, setAttachments] = useState<string[]>([]); // Base64 strings
+  const [attachments, setAttachments] = useState<string[]>([]);
+  
+  const [models, setModels] = useState<any[]>([]);
+  const [selectedModel, setSelectedModel] = useState("models/gemini-2.0-flash");
+  const [isModelModalOpen, setIsModelModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isVersionOpen, setIsVersionOpen] = useState(false);
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [chatTitle, setChatTitle] = useState("");
+  const [config, setConfig] = useState({
+    temperature: 0.7,
+    topP: 0.8,
+    maxOutputTokens: 2048,
+    customKey: "",
+    modelName: "models/gemini-2.0-flash",
+  });
+  
   const flatListRef = useRef<FlatList>(null);
   const chatId = Array.isArray(id) ? id[0] : id;
 
   useEffect(() => {
     if (!chatId) return;
 
-    const loadChat = async () => {
+    const loadData = async () => {
       try {
-        const data = await api.chat.get(chatId);
-        if (data.chat) {
-          const formatted = (data.chat.messages || []).map((m: any) => ({
+        const [chatData, modelsData] = await Promise.all([
+            api.chat.get(chatId),
+            api.models.list()
+        ]);
+        
+        if (chatData.chat) {
+          const formatted = (chatData.chat.messages || []).map((m: any) => ({
             id: m.id,
             role: m.role,
             content: m.content,
             time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           }));
           setMessages(formatted);
+          if (chatData.chat.title) setChatTitle(chatData.chat.title);
+          if (chatData.chat.config) {
+             const loadedConfig = {
+                temperature: chatData.chat.config.temperature ?? 0.7,
+                topP: chatData.chat.config.topP ?? 0.8,
+                maxOutputTokens: chatData.chat.config.maxOutputTokens ?? 2048,
+                customKey: chatData.chat.config.customKey ?? "",
+                modelName: chatData.chat.config.modelName ?? "models/gemini-2.0-flash",
+             };
+             setConfig(loadedConfig);
+             if (loadedConfig.modelName) setSelectedModel(loadedConfig.modelName);
+          }
         }
+        
+        if (modelsData.models) {
+            setModels(modelsData.models);
+        }
+        
+        // Load initial version info to get default branch
+        const versionData = await api.version.get(chatId);
+        if (versionData.branches && versionData.branches.length > 0) {
+            const master = versionData.branches.find((b: any) => b.name === 'master');
+            setSelectedBranchId(master ? master.id : versionData.branches[0].id);
+        }
+
       } catch (error) {
-        console.error("Failed to load chat:", error);
+        console.error("Failed to load data:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadChat();
+    loadData();
 
     const socket = getSocket();
     socket.emit('join-chat', chatId);
@@ -97,6 +143,34 @@ export default function ChatScreen() {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleUpdateConfig = async (newConfig: any) => {
+    setConfig(newConfig);
+    setSelectedModel(newConfig.modelName);
+    try {
+        await api.chat.update(chatId, { config: newConfig });
+    } catch (e) {
+        Alert.alert("Error", "Failed to save settings");
+    }
+  };
+
+  const handleRenameChat = async (newTitle: string) => {
+    setChatTitle(newTitle);
+    try {
+        await api.chat.update(chatId, { title: newTitle });
+    } catch (e) {
+        Alert.alert("Error", "Failed to rename chat");
+    }
+  };
+
+  const handleDeleteChat = async () => {
+    try {
+        await api.chat.delete(chatId);
+        router.replace('/(tabs)');
+    } catch (e) {
+        Alert.alert("Error", "Failed to delete chat");
+    }
+  };
+
   const handleSend = async () => {
     if ((!message.trim() && attachments.length === 0) || isSending) return;
     
@@ -126,9 +200,11 @@ export default function ChatScreen() {
             prompt: promptValue,
             chatId,
             history,
+            branchId: selectedBranchId,
             images: currentAttachments, // Send base64 images
             config: {
-                modelName: "models/gemini-2.0-flash", 
+                ...config,
+                modelName: selectedModel, 
             }
         });
         
@@ -147,6 +223,8 @@ export default function ChatScreen() {
         setIsSending(false);
     }
   };
+  
+  const currentModelName = models.find(m => m.name === selectedModel)?.displayName || selectedModel.split('/').pop();
 
   return (
     <View className="flex-1 bg-black">
@@ -159,18 +237,98 @@ export default function ChatScreen() {
             <TouchableOpacity onPress={() => router.back()} className="mr-3 p-2 -ml-2 rounded-full active:bg-zinc-900">
               <ArrowLeft size={24} color="white" />
             </TouchableOpacity>
-            <View className="flex-row items-center">
-              <Avatar fallback="G" size="sm" className="bg-blue-600 mr-3" />
+            
+            <TouchableOpacity 
+                className="flex-row items-center active:opacity-70 mr-2"
+                onPress={() => setIsModelModalOpen(true)}
+            >
+              <Avatar fallback="G" size="sm" className="bg-blue-600 mr-2" />
               <View>
-                <Text className="text-white font-bold text-base">Gemini Pro</Text>
-                <Text className="text-zinc-500 text-xs">Always active</Text>
+                <View className="flex-row items-center">
+                    <Text className="text-white font-bold text-sm mr-1 max-w-[100px]" numberOfLines={1}>{currentModelName}</Text>
+                    <ChevronDown size={12} color="#a1a1aa" />
+                </View>
+                <Text className="text-zinc-500 text-[10px]">Active</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity className="p-2 -mr-2 rounded-full active:bg-zinc-900">
-            <MoreVertical size={24} color="white" />
-          </TouchableOpacity>
+
+          <View className="flex-row items-center space-x-1">
+             <TouchableOpacity 
+                className="p-2 rounded-full active:bg-zinc-900"
+                onPress={() => setIsVersionOpen(true)}
+             >
+                <GitBranch size={20} color={selectedBranchId ? '#60a5fa' : '#a1a1aa'} />
+             </TouchableOpacity>
+             <TouchableOpacity 
+                className="p-2 rounded-full active:bg-zinc-900"
+                onPress={() => setIsSettingsOpen(true)}
+             >
+                <MoreVertical size={24} color="white" />
+             </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Settings Modal */}
+        <SettingsModal 
+            visible={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            config={config}
+            onUpdateConfig={handleUpdateConfig}
+            chatTitle={chatTitle}
+            onRename={handleRenameChat}
+            onDelete={handleDeleteChat}
+        />
+
+        {/* Version Modal */}
+        <VersionModal
+            visible={isVersionOpen}
+            onClose={() => setIsVersionOpen(false)}
+            chatId={chatId}
+            selectedBranchId={selectedBranchId}
+            onSelectBranch={setSelectedBranchId}
+        />
+
+        {/* Model Modal */}
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={isModelModalOpen}
+            onRequestClose={() => setIsModelModalOpen(false)}
+        >
+            <View className="flex-1 justify-end bg-black/50">
+                <View className="bg-zinc-900 rounded-t-3xl p-6 h-[50%]">
+                    <View className="flex-row justify-between items-center mb-6">
+                        <Text className="text-white text-xl font-bold">Select Model</Text>
+                        <TouchableOpacity onPress={() => setIsModelModalOpen(false)}>
+                            <X size={24} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                    <FlatList
+                        data={models}
+                        keyExtractor={item => item.name}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity 
+                                className={`flex-row items-center justify-between p-4 rounded-xl mb-2 ${selectedModel === item.name ? 'bg-blue-600/20 border border-blue-500/50' : 'bg-zinc-800'}`}
+                                onPress={() => {
+                                    const newConfig = { ...config, modelName: item.name };
+                                    setConfig(newConfig);
+                                    setSelectedModel(item.name);
+                                    handleUpdateConfig(newConfig); // Auto-save model change
+                                    setIsModelModalOpen(false);
+                                }}
+                            >
+                                <View>
+                                    <Text className={`font-bold text-base ${selectedModel === item.name ? 'text-blue-400' : 'text-white'}`}>{item.displayName}</Text>
+                                    <Text className="text-zinc-500 text-xs">{item.name}</Text>
+                                </View>
+                                {selectedModel === item.name && <Check size={20} color="#60a5fa" />}
+                            </TouchableOpacity>
+                        )}
+                    />
+                </View>
+            </View>
+        </Modal>
 
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

@@ -73,9 +73,17 @@ export const api = {
       return await res.json();
     },
     me: async () => {
-      const res = await fetchWithAuth('/user/me');
+      const res = await fetchWithAuth('/user');
       if (!res.ok) throw new Error('Failed to fetch user');
       return await res.json();
+    },
+    update: async (data: any) => {
+        const res = await fetchWithAuth('/user', {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update user');
+        return await res.json();
     }
   },
   chat: {
@@ -113,6 +121,21 @@ export const api = {
       });
       if (!res.ok) throw new Error('Failed to send message');
       return await res.json();
+    },
+    update: async (chatId: string, data: { title?: string; config?: any }) => {
+        const res = await fetchWithAuth(`/chat/${chatId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update chat');
+        return await res.json();
+    },
+    delete: async (chatId: string) => {
+        const res = await fetchWithAuth(`/chat/${chatId}`, {
+            method: 'DELETE',
+        });
+        if (!res.ok) throw new Error('Failed to delete chat');
+        return await res.json();
     }
   },
   bots: {
@@ -120,6 +143,36 @@ export const api = {
       const res = await fetchWithAuth('/user/bots');
       if (!res.ok) throw new Error('Failed to fetch bots');
       return await res.json();
+    }
+  },
+  models: {
+    list: async () => {
+      const res = await fetchWithAuth('/models');
+      if (!res.ok) throw new Error('Failed to fetch models');
+      return await res.json();
+    }
+  },
+  version: {
+    get: async (chatId: string) => {
+        const res = await fetchWithAuth(`/version?chatId=${chatId}`);
+        if (!res.ok) throw new Error('Failed to fetch version data');
+        return await res.json();
+    },
+    createBranch: async (data: any) => {
+        const res = await fetchWithAuth('/version/branch', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to create branch');
+        return await res.json();
+    },
+    createCheckpoint: async (data: any) => {
+        const res = await fetchWithAuth('/version/checkpoint', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to create checkpoint');
+        return await res.json();
     }
   }
 };

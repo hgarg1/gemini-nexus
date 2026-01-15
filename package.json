@@ -1,5 +1,5 @@
 {
-  "name": "test 22",
+  "name": "test-22",
   "private": true,
   "scripts": {
     "build": "turbo run build",

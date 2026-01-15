@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { listGeminiModels } from "@/lib/gemini";
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const user = await getSessionUser(req);
     
     let apiKey = undefined;
-    if (session?.user && (session.user as any).id) {
-      const user = await prisma.user.findUnique({
-        where: { id: (session.user as any).id },
+    if (user && (user as any).id) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: (user as any).id },
         select: { apiKey: true }
       });
-      apiKey = user?.apiKey || undefined;
+      apiKey = dbUser?.apiKey || undefined;
     }
 
     const models = await listGeminiModels(apiKey);
