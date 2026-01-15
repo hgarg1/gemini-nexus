@@ -2,6 +2,18 @@ import { MetadataRoute } from "next";
 import { prisma } from "@repo/database";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
+  // During build time or if DB is not configured, return safe defaults immediately
+  if (!process.env.DATABASE_URL) {
+    return {
+      rules: {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin", "/api", "/chat/[id]"],
+      },
+      sitemap: "https://nexus.gemini/sitemap.xml", // Placeholder
+    };
+  }
+
   let robotsSetting = null;
   try {
     robotsSetting = await prisma.systemSettings.findUnique({

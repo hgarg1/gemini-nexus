@@ -7,13 +7,27 @@ import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    let session = await getServerSession(authOptions);
+    let userId: string | null = (session?.user as any)?.id;
+
+    // Mobile Auth Fallback
+    if (!userId) {
+      const authHeader = req.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const apiKey = authHeader.split(" ")[1];
+        // API Key lookup - assuming apiKey is unique in User table
+        const user = await prisma.user.findFirst({ where: { apiKey } });
+        if (user) {
+          userId = user.id;
+        }
+      }
+    }
+
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { prompt, chatId, history, config, customKey, image, images, metadata, branchId } = await req.json();
-    const userId = (session.user as any).id;
     const payloadImages = Array.isArray(images) ? images : image ? [image] : [];
     const payloadMeta = Array.isArray(metadata) ? metadata : metadata ? [metadata] : [];
 
