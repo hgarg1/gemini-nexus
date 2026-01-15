@@ -2,13 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@repo/database";
-import { Queue } from "bullmq";
-import { Redis } from "ioredis";
+import { getTransmissionQueue } from "@/lib/queue";
 import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
-
-const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
-const transmissionQueue = new Queue("transmission-queue", { connection: connection as any });
 
 export async function POST(req: NextRequest) {
   try {
@@ -76,6 +71,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Add to Queue
+    const transmissionQueue = getTransmissionQueue();
+    if (!transmissionQueue) {
+        throw new Error("Queue service unavailable");
+    }
+
     await transmissionQueue.add("process-gemini", {
       prompt,
       chatId,

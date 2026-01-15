@@ -1,7 +1,6 @@
 # Stage 1: Build (Debian slim)
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
-
 # (Optional but recommended) CA certs for fetching deps + prisma engines cleanly
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -25,7 +24,7 @@ RUN npm run build --workspace=apps/web
 
 
 # Stage 2: Runtime (Debian slim)
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
