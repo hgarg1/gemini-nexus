@@ -131,6 +131,9 @@ export default function RegisterScreen() {
                 placeholder="John Doe" 
                 label="Full Name"
                 icon={<User size={20} color="#a1a1aa" />}
+                value={form.name}
+                onChangeText={(value) => setForm(prev => ({ ...prev, name: value }))}
+                error={errors.name}
               />
               <Input 
                 placeholder="name@example.com" 
@@ -138,20 +141,45 @@ export default function RegisterScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 icon={<Mail size={20} color="#a1a1aa" />}
+                value={form.email}
+                onChangeText={(value) => setForm(prev => ({ ...prev, email: value }))}
+                error={errors.email}
               />
               <Input 
-                placeholder="••••••••" 
+                placeholder="Enter password" 
                 label="Password"
                 secureTextEntry
                 icon={<Lock size={20} color="#a1a1aa" />}
+                value={form.password}
+                onChangeText={(value) => setForm(prev => ({ ...prev, password: value }))}
+                error={errors.password}
               />
-              <Input 
-                placeholder="••••••••" 
-                label="Confirm Password"
-                secureTextEntry
-                icon={<Lock size={20} color="#a1a1aa" />}
-              />
-              
+              <View className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-4">
+                <Text className="text-zinc-400 text-xs font-bold tracking-wider mb-3">PASSWORD REQUIREMENTS</Text>
+                <View className="flex-row flex-wrap">
+                  {requirements.map((req) => (
+                    <View key={req.label} className="flex-row items-center w-1/2 mb-2">
+                      <View
+                        className={`w-4 h-4 rounded-full items-center justify-center mr-2 ${
+                          req.valid ? 'bg-emerald-500/20 border border-emerald-400' : 'bg-zinc-800 border border-zinc-700'
+                        }`}
+                      >
+                        {req.valid && <Check size={10} color="#34d399" />}
+                      </View>
+                      <Text className={`text-[10px] font-bold ${req.valid ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                        {req.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {serverError ? (
+                <View className="bg-red-500/10 border border-red-500/30 rounded-2xl p-3">
+                  <Text className="text-red-400 text-xs font-bold text-center">{serverError}</Text>
+                </View>
+              ) : null}
+
               <View className="pt-4">
                 <Button 
                   label="Create Account" 
