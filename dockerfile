@@ -1,6 +1,8 @@
 # Stage 1: Build (Debian slim)
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+ENV npm_config_optional=true
+ENV npm_config_ignore_optional=false
 RUN corepack enable
 RUN corepack prepare npm@11.7.0 --activate
 # (Optional but recommended) CA certs for fetching deps + prisma engines cleanly

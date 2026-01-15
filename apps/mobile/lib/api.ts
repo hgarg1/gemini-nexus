@@ -64,12 +64,17 @@ export const api = {
       return data;
     },
     register: async (name, email, password) => {
-      const res = await fetch(`${BASE_URL}/register`, {
+      const res = await fetch(`${BASE_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
       });
       if (!res.ok) throw new Error('Registration failed');
+      return await res.json();
+    },
+    passwordPolicy: async () => {
+      const res = await fetch(`${BASE_URL}/password-policy`);
+      if (!res.ok) throw new Error('Failed to load password policy');
       return await res.json();
     },
     me: async () => {
@@ -85,6 +90,44 @@ export const api = {
         if (!res.ok) throw new Error('Failed to update user');
         return await res.json();
     }
+  },
+  user: {
+    key: async () => {
+      const res = await fetchWithAuth('/user/key');
+      if (!res.ok) throw new Error('Failed to fetch user key');
+      return await res.json();
+    },
+    blocked: {
+      list: async () => {
+        const res = await fetchWithAuth('/user/blocked');
+        if (!res.ok) throw new Error('Failed to fetch blocked users');
+        return await res.json();
+      },
+      unblock: async (targetId: string) => {
+        const res = await fetchWithAuth('/user/blocked', {
+          method: 'DELETE',
+          body: JSON.stringify({ targetId }),
+        });
+        if (!res.ok) throw new Error('Failed to unblock user');
+        return await res.json();
+      },
+    },
+  },
+  join: {
+    get: async (code: string) => {
+      const res = await fetch(`${BASE_URL}/join/${code}`);
+      if (!res.ok) throw new Error('Invalid or expired link');
+      return await res.json();
+    },
+    submit: async (code: string) => {
+      const res = await fetchWithAuth(`/join/${code}`, { method: 'POST' });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        const message = error?.error || 'Failed to join';
+        throw new Error(message);
+      }
+      return await res.json();
+    },
   },
   chat: {
     list: async () => {
