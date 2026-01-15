@@ -1,18 +1,17 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isAdminRole } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
 
 // GET: List admin chats
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== "admin") {
+    const context = await getAdminContext(req);
+    if (!context || !isAdminRole(context.roleName)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     const chats = await prisma.adminAIChat.findMany({
-      where: { userId: (session.user as any).id },
+      where: { userId: context.user.id },
       orderBy: { updatedAt: "desc" },
       take: 10,
     });
@@ -24,10 +23,10 @@ export async function GET() {
 }
 
 // POST: Create new admin chat
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== "admin") {
+    const context = await getAdminContext(req);
+    if (!context || !isAdminRole(context.roleName)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -35,7 +34,7 @@ export async function POST(req: Request) {
 
     const chat = await prisma.adminAIChat.create({
       data: {
-        userId: (session.user as any).id,
+        userId: context.user.id,
         title: title || "New Session",
       },
     });

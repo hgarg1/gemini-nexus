@@ -1,18 +1,15 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isAdminRole } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
 
 // PATCH: Update user role or ban status
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    const userRole = (session?.user as any)?.role;
-    const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
-    if (!session?.user || !isAuthorized) {
+    const context = await getAdminContext(req);
+    if (!context || !isAdminRole(context.roleName)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
@@ -26,7 +23,7 @@ export async function PATCH(
     if (isBanned !== undefined) data.isBanned = isBanned;
 
     // Prevent self-ban/self-demote
-    if (id === (session.user as any).id) {
+    if (id === context.user.id) {
         if (data.isBanned) return NextResponse.json({ error: "Cannot ban self" }, { status: 400 });
         if (data.role && data.role !== "admin") return NextResponse.json({ error: "Cannot demote self" }, { status: 400 });
         if (data.roleId) {
@@ -45,7 +42,7 @@ export async function PATCH(
     // Log this action
     await prisma.usageLog.create({
       data: {
-        userId: (session.user as any).id,
+        userId: context.user.id,
         action: "admin_user_update",
         resource: id,
         details: data,
@@ -61,20 +58,18 @@ export async function PATCH(
 
 // DELETE: Delete user
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    const userRole = (session?.user as any)?.role;
-    const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
-    if (!session?.user || !isAuthorized) {
+    const context = await getAdminContext(req);
+    if (!context || !isAdminRole(context.roleName)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     const { id } = await params;
 
-    if (id === (session.user as any).id) {
+    if (id === context.user.id) {
         return NextResponse.json({ error: "Cannot delete self" }, { status: 400 });
     }
 
@@ -84,7 +79,7 @@ export async function DELETE(
 
     await prisma.usageLog.create({
         data: {
-          userId: (session.user as any).id,
+          userId: context.user.id,
           action: "admin_user_delete",
           resource: id,
         },

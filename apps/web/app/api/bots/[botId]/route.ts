@@ -1,12 +1,24 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
-import { NextResponse } from "next/server";
 
-export async function GET(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+const resolveUser = async (req: NextRequest) => {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) return null;
+  const userRecord = await prisma.user.findUnique({
+    where: { id: (sessionUser as any).id },
+    select: { id: true, role: true, userRole: { select: { name: true } } },
+  });
+  if (!userRecord) return null;
+  const roleName = userRecord.userRole?.name || userRecord.role || "";
+  const isAdmin = roleName === "admin" || roleName === "Admin" || roleName === "Super Admin";
+  return { id: userRecord.id, isAdmin };
+};
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ botId: string }> }) {
   const { botId } = await params;
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  const user = await resolveUser(req);
+  if (!user) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
@@ -19,7 +31,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ botId: s
     if (!bot) return new NextResponse("Bot not found", { status: 404 });
 
     // Check access
-    if (bot.creatorId !== (session.user as any).id && !bot.isPublic) {
+    if (bot.creatorId !== user.id && !bot.isPublic) {
         return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -30,10 +42,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ botId: s
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ botId: string }> }) {
     const { botId } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    const user = await resolveUser(req);
+    if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
   
@@ -46,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ botId:
       });
 
       if (!bot) return new NextResponse("Bot not found", { status: 404 });
-      if (bot.creatorId !== (session.user as any).id) {
+      if (bot.creatorId !== user.id) {
           return new NextResponse("Forbidden", { status: 403 });
       }
   
@@ -72,10 +84,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ botId:
     }
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ botId: string }> }) {
     const { botId } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
+    const user = await resolveUser(req);
+    if (!user) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
@@ -86,9 +98,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ botId
 
         if (!bot) return new NextResponse("Bot not found", { status: 404 });
         
-        const isAdmin = (session.user as any).role === "admin";
-
-        if (bot.creatorId !== (session.user as any).id && !isAdmin) {
+        if (bot.creatorId !== user.id && !user.isAdmin) {
             return new NextResponse("Forbidden", { status: 403 });
         }
 

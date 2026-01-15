@@ -1,12 +1,11 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -24,7 +23,7 @@ export async function POST(req: Request) {
       where: { id: chatId },
       select: { userId: true },
     });
-    if (!chat || chat.userId !== (session.user as any).id) {
+    if (!chat || chat.userId !== (user as any).id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

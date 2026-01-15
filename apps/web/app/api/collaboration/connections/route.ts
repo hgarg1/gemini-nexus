@@ -1,16 +1,15 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
-export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+export async function GET(req: NextRequest) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (sessionUser as any).id;
 
   const connections = await prisma.userConnection.findMany({
     where: {
@@ -58,13 +57,13 @@ export async function GET(req: Request) {
   return NextResponse.json({ connections: Array.from(allUsersMap.values()) });
 }
 
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+export async function POST(req: NextRequest) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (sessionUser as any).id;
   const { targetUserId, action } = await req.json();
 
   if (!targetUserId || typeof targetUserId !== "string" || targetUserId === userId) {

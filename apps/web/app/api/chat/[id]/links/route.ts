@@ -1,18 +1,17 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: chatId } = await params;
-  const userId = (session.user as any).id;
+  const userId = (user as any).id;
 
   const chat = await prisma.chat.findUnique({
     where: { id: chatId },
@@ -32,14 +31,14 @@ export async function GET(
 }
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id: chatId } = await params;
-  const userId = (session.user as any).id;
+  const userId = (user as any).id;
   const { label, maxUses, expiresAt } = await req.json();
 
   const chat = await prisma.chat.findUnique({

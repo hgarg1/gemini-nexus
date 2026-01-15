@@ -1,21 +1,20 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isAdminRole } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
 import { adminTools, adminFunctions } from "@/lib/admin-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || (session.user as any).role !== "admin" && (session.user as any).role !== "Super Admin") {
+    const context = await getAdminContext(req);
+    if (!context || !isAdminRole(context.roleName)) {
       return NextResponse.json({ error: "Unauthorized access detected." }, { status: 403 });
     }
 
     const { prompt, history, confirmedAction, chatId } = await req.json();
-    const adminId = (session.user as any).id;
+    const adminId = context.user.id;
 
     let activeChatId = chatId;
 
@@ -60,11 +59,11 @@ export async function POST(req: Request) {
       activeChatId = chat.id;
     }
 
-    const permissions = (session.user as any).permissions || [];
+    const permissions = context.permissions || [];
 
     const systemInstruction = `You are NEXUS_CORE_AI, the supreme administrative intelligence for this platform.
 Your purpose is to assist the high-level administrator with system telemetry, operative management, and security protocols.
-Current Admin: ${session.user.name} (${session.user.email})
+Current Admin: ${context.user.name || "ADMIN"} (${context.user.email || "UNKNOWN"})
 Permissions: ${permissions.join(", ")}
 
 You have access to real-time system stats, operative databases, organizations, and the permission bank via tools.

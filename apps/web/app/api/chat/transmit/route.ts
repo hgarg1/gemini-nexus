@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { getTransmissionQueue } from "@/lib/queue";
 import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
 export async function POST(req: NextRequest) {
   try {
-    let session = await getServerSession(authOptions);
-    let userId: string | null = (session?.user as any)?.id;
+    const sessionUser = await getSessionUser(req);
+    let userId: string | null = (sessionUser as any)?.id || null;
 
-    // Mobile Auth Fallback
+    // API key fallback for direct integrations
     if (!userId) {
       const authHeader = req.headers.get("authorization");
       if (authHeader && authHeader.startsWith("Bearer ")) {

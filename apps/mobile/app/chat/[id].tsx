@@ -1,18 +1,20 @@
 import { View, Text, ScrollView, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, FlatList, ActivityIndicator, Image, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, MoreVertical, Send, Paperclip, Bot, User, X, ChevronDown, Check, GitBranch } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
-import { useState, useRef, useEffect } from 'react';
+import { ArrowLeft, MoreVertical, Send, Paperclip, Bot, X, ChevronDown, Check, GitBranch, Share2, Database, Image as ImageIcon, Users } from 'lucide-react-native';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { MotiView } from 'moti';
 import { Avatar } from '../../components/ui/Avatar';
 import { api } from '../../lib/api';
 import { getSocket } from '../../lib/socket';
 import Markdown from 'react-native-markdown-display';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import { SettingsModal } from '../../components/SettingsModal';
 import { VersionModal } from '../../components/VersionModal';
+import { MemoryModal } from '../../components/MemoryModal';
+import { AssetsModal } from '../../components/AssetsModal';
+import { ShareModal } from '../../components/ShareModal';
+import { CollaborationModal } from '../../components/CollaborationModal';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams();
@@ -28,6 +30,10 @@ export default function ChatScreen() {
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isVersionOpen, setIsVersionOpen] = useState(false);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+  const [isAssetsOpen, setIsAssetsOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isCollabOpen, setIsCollabOpen] = useState(false);
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [chatTitle, setChatTitle] = useState("");
   const [config, setConfig] = useState({
@@ -57,6 +63,8 @@ export default function ChatScreen() {
             role: m.role,
             content: m.content,
             time: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            assets: m.assets || m.images || [],
+            reactions: m.reactions || [],
           }));
           setMessages(formatted);
           if (chatData.chat.title) setChatTitle(chatData.chat.title);
@@ -111,13 +119,15 @@ export default function ChatScreen() {
                 role: msg.role,
                 content: msg.content,
                 time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                assets: msg.assets || msg.images || [],
+                reactions: msg.reactions || [],
             }];
         });
       }
     });
 
     socket.on('message-updated', (msg: any) => {
-        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: msg.content } : m));
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, content: msg.content, assets: msg.assets || m.assets } : m));
     });
 
     return () => {
@@ -183,6 +193,7 @@ export default function ChatScreen() {
       role: 'user',
       content: promptValue,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      assets: currentAttachments,
     };
 
     setMessages((prev) => [...prev, newMsg]);
@@ -213,6 +224,7 @@ export default function ChatScreen() {
                 ...m,
                 id: res.userMessage.id,
                 time: new Date(res.userMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                assets: res.userMessage.assets || m.assets,
             } : m));
         }
 
@@ -225,6 +237,16 @@ export default function ChatScreen() {
   };
   
   const currentModelName = models.find(m => m.name === selectedModel)?.displayName || selectedModel.split('/').pop();
+  const assets = useMemo(() => {
+    return messages.flatMap((message: any) => {
+      const list = Array.isArray(message.assets) ? message.assets : [];
+      return list.map((asset: any) => ({
+        url: typeof asset === 'string' ? asset : asset?.url,
+        role: asset?.role || message.role,
+      })).filter((asset: any) => !!asset.url);
+    });
+  }, [messages]);
+  const assetsCount = assets.length;
 
   return (
     <View className="flex-1 bg-black">
@@ -254,6 +276,30 @@ export default function ChatScreen() {
           </View>
 
           <View className="flex-row items-center space-x-1">
+             <TouchableOpacity 
+                className="p-2 rounded-full active:bg-zinc-900"
+                onPress={() => setIsMemoryOpen(true)}
+             >
+                <Database size={20} color="#a1a1aa" />
+             </TouchableOpacity>
+             <TouchableOpacity 
+                className="p-2 rounded-full active:bg-zinc-900"
+                onPress={() => setIsAssetsOpen(true)}
+             >
+                <ImageIcon size={20} color={assetsCount > 0 ? '#60a5fa' : '#a1a1aa'} />
+             </TouchableOpacity>
+             <TouchableOpacity 
+                className="p-2 rounded-full active:bg-zinc-900"
+                onPress={() => setIsCollabOpen(true)}
+             >
+                <Users size={20} color="#a1a1aa" />
+             </TouchableOpacity>
+             <TouchableOpacity 
+                className="p-2 rounded-full active:bg-zinc-900"
+                onPress={() => setIsShareOpen(true)}
+             >
+                <Share2 size={20} color="#a1a1aa" />
+             </TouchableOpacity>
              <TouchableOpacity 
                 className="p-2 rounded-full active:bg-zinc-900"
                 onPress={() => setIsVersionOpen(true)}
@@ -288,6 +334,33 @@ export default function ChatScreen() {
             selectedBranchId={selectedBranchId}
             onSelectBranch={setSelectedBranchId}
         />
+
+        <MemoryModal
+            visible={isMemoryOpen}
+            onClose={() => setIsMemoryOpen(false)}
+        />
+
+        <AssetsModal
+            visible={isAssetsOpen}
+            onClose={() => setIsAssetsOpen(false)}
+            assets={assets}
+        />
+
+        {chatId ? (
+          <ShareModal
+              visible={isShareOpen}
+              onClose={() => setIsShareOpen(false)}
+              chatId={chatId}
+          />
+        ) : null}
+
+        {chatId ? (
+          <CollaborationModal
+              visible={isCollabOpen}
+              onClose={() => setIsCollabOpen(false)}
+              chatId={chatId}
+          />
+        ) : null}
 
         {/* Model Modal */}
         <Modal
@@ -368,6 +441,25 @@ export default function ChatScreen() {
                         : 'bg-zinc-800 rounded-tl-sm'
                     }`}
                     >
+                    {Array.isArray(item.assets) && item.assets.length > 0 && (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          className="mb-2"
+                        >
+                          {item.assets.map((asset: any, assetIndex: number) => {
+                            const uri = typeof asset === 'string' ? asset : asset?.url;
+                            if (!uri) return null;
+                            return (
+                              <Image
+                                key={`${item.id}-asset-${assetIndex}`}
+                                source={{ uri }}
+                                className="w-32 h-24 rounded-lg mr-2 border border-white/10"
+                              />
+                            );
+                          })}
+                        </ScrollView>
+                    )}
                     <Markdown
                         style={{
                             body: { color: item.role === 'user' ? 'white' : '#f4f4f5', fontSize: 16 },

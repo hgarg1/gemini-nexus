@@ -1,18 +1,23 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || ((session.user as any).role !== "admin" && (session.user as any).role !== "Super Admin")) {
+export async function GET(req: NextRequest) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: (session.user as any).id },
-    select: { canViewBlockLogs: true }
+    where: { id: (sessionUser as any).id },
+    select: { canViewBlockLogs: true, userRole: { select: { name: true } } },
   });
+
+  const userRole = user?.userRole?.name;
+  const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
+  if (!isAuthorized) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const where: any = {};
   if (!user?.canViewBlockLogs) {

@@ -1,12 +1,11 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isAdminRole } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
 import { resolveChatPolicySettings, defaultChatPolicy, defaultChatOrgOverride } from "@/lib/chat-policy";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== "admin") {
+export async function GET(req: NextRequest) {
+  const context = await getAdminContext(req);
+  if (!context || !isAdminRole(context.roleName)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -22,9 +21,9 @@ export async function GET() {
   });
 }
 
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== "admin") {
+export async function POST(req: NextRequest) {
+  const context = await getAdminContext(req);
+  if (!context || !isAdminRole(context.roleName)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -44,7 +43,7 @@ export async function POST(req: Request) {
     // Log the action
     await prisma.usageLog.create({
       data: {
-        userId: (session.user as any).id,
+        userId: context.user.id,
         action: "admin.chat_policy_update",
         details: { policy, orgOverride },
       },

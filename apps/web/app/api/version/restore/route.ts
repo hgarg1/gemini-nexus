@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { computeDelta, loadCheckpointChain, materializeState, type CheckpointDelta } from "@/lib/versioning";
 
@@ -19,10 +18,10 @@ const collectChainIds = async (checkpointId: string) => {
   return ids;
 };
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -40,7 +39,7 @@ export async function POST(req: Request) {
       where: { id: chatId },
       select: { userId: true },
     });
-    if (!chat || chat.userId !== (session.user as any).id) {
+    if (!chat || chat.userId !== (user as any).id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -91,7 +90,7 @@ export async function POST(req: Request) {
             comment: node.comment || undefined,
             delta,
             parentId: newHeadId || undefined,
-            createdById: (session.user as any).id,
+            createdById: (user as any).id,
           },
         });
         newHeadId = newCheckpoint.id;
@@ -123,7 +122,7 @@ export async function POST(req: Request) {
         comment: `Restored from ${checkpoint.id.slice(-6)}`,
         delta,
         parentId: targetHeadId || undefined,
-        createdById: (session.user as any).id,
+        createdById: (user as any).id,
       },
     });
 

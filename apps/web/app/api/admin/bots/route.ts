@@ -1,12 +1,10 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isAdminRole } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
-import { NextResponse } from "next/server";
 
-export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user || (session.user as any).role !== "admin") {
+export async function GET(req: NextRequest) {
+  const context = await getAdminContext(req);
+  if (!context || !isAdminRole(context.roleName)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 

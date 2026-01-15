@@ -29,6 +29,9 @@ RUN npm run db:generate
 # This will generate the .next/standalone folder due to output: "standalone" in next.config.js
 RUN npm run build --workspace=apps/web
 
+# Compile seed scripts to JS
+RUN npx tsc apps/web/scripts/seed-admin.ts --outDir apps/web/scripts --module commonjs --target es2020 --esModuleInterop --skipLibCheck || true
+
 # Stage 2: Production Runner
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -39,6 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install prisma globally to allow running migrations/push
+RUN npm install -g prisma
 
 # Don't run as root
 RUN addgroup --system --gid 1001 nodejs
@@ -55,10 +61,18 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
+# Ensure packages/database/prisma/schema.prisma is available for db push
+COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
+
+# Copy the compiled scripts and entrypoint
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/scripts ./apps/web/scripts
+RUN chmod +x ./apps/web/scripts/docker-entrypoint.sh
+
 USER nextjs
 
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+ENTRYPOINT ["./apps/web/scripts/docker-entrypoint.sh"]
 CMD ["node", "apps/web/server.js"]

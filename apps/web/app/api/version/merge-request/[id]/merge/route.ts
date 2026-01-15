@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { computeDelta, materializeState, type CheckpointDelta } from "@/lib/versioning";
 
@@ -20,12 +19,12 @@ const getChainIds = async (checkpointId: string) => {
 };
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -41,7 +40,7 @@ export async function POST(
         targetBranch: true,
       },
     });
-    if (!mergeRequest || mergeRequest.chat.userId !== (session.user as any).id) {
+    if (!mergeRequest || mergeRequest.chat.userId !== (user as any).id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -102,7 +101,7 @@ export async function POST(
             comment: checkpoint.comment || undefined,
             delta,
             parentId: newHeadId || undefined,
-            createdById: (session.user as any).id,
+            createdById: (user as any).id,
           },
         });
         newHeadId = newCheckpoint.id;
@@ -134,7 +133,7 @@ export async function POST(
           comment: mergeRequest.description || undefined,
           delta,
           parentId: targetHeadId || undefined,
-          createdById: (session.user as any).id,
+          createdById: (user as any).id,
         },
       });
       await prisma.branch.update({

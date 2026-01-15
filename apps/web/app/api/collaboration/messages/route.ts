@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 import { getEffectiveChatPolicy } from "@/lib/chat-policy-server";
 
 const MAX_MESSAGE_LENGTH = 2000;
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (sessionUser as any).id;
   const otherId = req.nextUrl.searchParams.get("userId");
   if (!otherId) {
     return NextResponse.json({ error: "Missing user" }, { status: 400 });
@@ -64,13 +63,13 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ messages, appearance: connection?.appearanceSettings });
 }
 
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+export async function POST(req: NextRequest) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
+  const userId = (sessionUser as any).id;
   const { userId: otherId, content, assetUrls } = await req.json();
 
   if (!otherId || typeof otherId !== "string" || otherId === userId) {

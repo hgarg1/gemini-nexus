@@ -197,6 +197,18 @@ export default function ProfileScreen() {
                 </View>
                 <ChevronRight size={20} color="#52525b" />
             </TouchableOpacity>
+            <TouchableOpacity className="flex-row items-center p-4 border-t border-zinc-800" onPress={() => router.push('/admin')}>
+                <View className="w-8 h-8 rounded-full bg-zinc-800 items-center justify-center mr-3">
+                    <Shield size={16} color="white" />
+                </View>
+                <View className="flex-1">
+                    <Text className="text-white text-base font-medium">Admin Console</Text>
+                    <Text className="text-zinc-500 text-xs" numberOfLines={1}>
+                        System operations and audit logs
+                    </Text>
+                </View>
+                <ChevronRight size={20} color="#52525b" />
+            </TouchableOpacity>
           </View>
 
 

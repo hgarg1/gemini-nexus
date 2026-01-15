@@ -1,11 +1,10 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isSuperAdmin } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
 
-export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== "Super Admin") {
+export async function GET(req: NextRequest) {
+  const context = await getAdminContext(req);
+  if (!context || !isSuperAdmin(context.roleName)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -17,9 +16,9 @@ export async function GET() {
   return NextResponse.json({ roles });
 }
 
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== "Super Admin") {
+export async function POST(req: NextRequest) {
+  const context = await getAdminContext(req);
+  if (!context || !isSuperAdmin(context.roleName)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

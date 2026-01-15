@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import { Building2, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react-native';
+import { Building2, ShieldCheck, AlertCircle, Sparkles, MessageSquare } from 'lucide-react-native';
 import { Button } from '../../components/ui/Button';
 import { api } from '../../lib/api';
 
@@ -16,6 +16,8 @@ export default function JoinScreen() {
   const [state, setState] = useState<JoinState>('loading');
   const [error, setError] = useState('');
   const [org, setOrg] = useState<any>(null);
+  const [chat, setChat] = useState<any>(null);
+  const [joinType, setJoinType] = useState<'org' | 'chat'>('org');
   const [requiresApproval, setRequiresApproval] = useState<boolean | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
@@ -32,11 +34,22 @@ export default function JoinScreen() {
       try {
         const data = await api.join.get(code);
         setOrg(data.organization);
+        setChat(null);
+        setJoinType('org');
         setRequiresApproval(data.requiresApproval ?? null);
         setState('ready');
       } catch (err: any) {
-        setError(err?.message || 'Link verification failed.');
-        setState('error');
+        try {
+          const chatData = await api.chatJoin.get(code);
+          setChat(chatData.chat);
+          setOrg(null);
+          setJoinType('chat');
+          setRequiresApproval(null);
+          setState('ready');
+        } catch (chatErr: any) {
+          setError(chatErr?.message || err?.message || 'Link verification failed.');
+          setState('error');
+        }
       }
     };
 
@@ -66,8 +79,15 @@ export default function JoinScreen() {
     if (isJoining || !code || typeof code !== 'string') return;
     setIsJoining(true);
     try {
-      const data = await api.join.submit(code);
-      if (data.status === 'PENDING_APPROVAL') {
+      const data = joinType === 'chat' ? await api.chatJoin.submit(code) : await api.join.submit(code);
+      if (joinType === 'chat') {
+        setState('success');
+        if (data.chatId) {
+          setTimeout(() => {
+            router.replace(`/chat/${data.chatId}`);
+          }, 800);
+        }
+      } else if (data.status === 'PENDING_APPROVAL') {
         setState('pending');
       } else {
         setState('success');
@@ -83,6 +103,8 @@ export default function JoinScreen() {
       setIsJoining(false);
     }
   };
+
+  const displayName = joinType === 'chat' ? chat?.title || 'Chat' : org?.name || 'Organization';
 
   return (
     <View className="flex-1 bg-black items-center justify-center px-6">
@@ -119,29 +141,31 @@ export default function JoinScreen() {
                 colors={['#0ea5e9', '#22d3ee']}
                 className="w-20 h-20 rounded-3xl items-center justify-center"
               >
-                <Building2 size={36} color="white" />
+                {joinType === 'chat' ? <MessageSquare size={36} color="white" /> : <Building2 size={36} color="white" />}
               </LinearGradient>
               <Text className="text-white text-2xl font-bold mt-4 text-center">
-                {org?.name || 'Organization'}
+                {displayName}
               </Text>
               <Text className="text-zinc-500 text-sm mt-2 text-center">
-                Secure invitation to join this sector.
+                {joinType === 'chat' ? 'Secure link to join this chat stream.' : 'Secure invitation to join this sector.'}
               </Text>
             </View>
 
             {isAuthed ? (
               <View className="space-y-4">
                 <Button
-                  label={isJoining ? 'Finalizing...' : 'Finalize Onboarding'}
+                  label={isJoining ? 'Finalizing...' : joinType === 'chat' ? 'Join Chat' : 'Finalize Onboarding'}
                   onPress={handleJoin}
                   isLoading={isJoining}
                 />
-                <View className="flex-row items-center justify-center">
-                  <ShieldCheck size={14} color={requiresApproval ? '#60a5fa' : '#22c55e'} />
-                  <Text className="text-zinc-500 text-xs font-semibold ml-2">
-                    {requiresApproval ? 'Approval required' : 'Auto-join enabled'}
-                  </Text>
-                </View>
+                {joinType === 'org' ? (
+                  <View className="flex-row items-center justify-center">
+                    <ShieldCheck size={14} color={requiresApproval ? '#60a5fa' : '#22c55e'} />
+                    <Text className="text-zinc-500 text-xs font-semibold ml-2">
+                      {requiresApproval ? 'Approval required' : 'Auto-join enabled'}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             ) : (
               <View className="space-y-3">
@@ -169,9 +193,17 @@ export default function JoinScreen() {
           <Sparkles size={42} color="#22c55e" />
           <Text className="text-white text-xl font-bold mt-4">Uplink Established</Text>
           <Text className="text-zinc-500 text-sm mt-3 text-center">
-            Handshake complete. Welcome to {org?.name || 'the sector'}.
+            {joinType === 'chat'
+              ? `Handshake complete. Chat access granted to ${displayName}.`
+              : `Handshake complete. Welcome to ${displayName}.`}
           </Text>
-          <Button label="Enter the Nexus" className="mt-6" onPress={() => router.replace('/(tabs)')} />
+          <Button
+            label={joinType === 'chat' ? 'Enter Chat' : 'Enter the Nexus'}
+            className="mt-6"
+            onPress={() =>
+              joinType === 'chat' && chat?.id ? router.replace(`/chat/${chat.id}`) : router.replace('/(tabs)')
+            }
+          />
         </View>
       )}
     </View>

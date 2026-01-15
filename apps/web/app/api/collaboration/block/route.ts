@@ -1,16 +1,15 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+export async function POST(req: NextRequest) {
+  const sessionUser = await getSessionUser(req);
+  if (!sessionUser) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { targetUserId } = await req.json();
-  const requesterId = (session.user as any).id;
+  const requesterId = (sessionUser as any).id;
 
   if (!targetUserId) {
     return NextResponse.json({ error: "Target user ID required" }, { status: 400 });

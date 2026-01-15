@@ -1,16 +1,13 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { getAdminContext, isAdminRole } from "@/lib/admin-auth";
 import { prisma } from "@repo/database";
 
 export async function GET(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  const userRole = (session?.user as any)?.role;
-  const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
-  if (!session?.user || !isAuthorized) {
+  const context = await getAdminContext(req);
+  if (!context || !isAdminRole(context.roleName)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -25,13 +22,11 @@ export async function GET(
 }
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  const userRole = (session?.user as any)?.role;
-  const isAuthorized = userRole === "Super Admin" || userRole === "Admin" || userRole?.toLowerCase() === "admin";
-  if (!session?.user || !isAuthorized) {
+  const context = await getAdminContext(req);
+  if (!context || !isAdminRole(context.roleName)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
