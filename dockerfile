@@ -20,8 +20,8 @@ COPY packages ./packages
 COPY packages/database/prisma ./prisma
 
 # Install dependencies for the whole repo
-RUN npm ci
-
+RUN npm ci \
+ && npm i -D @tailwindcss/oxide-linux-x64-gnu@4.1.18 # Fix for Tailwind on Debian-based images
 # Generate Prisma client and build only the web app
 RUN npx prisma generate
 RUN npm run build --workspace=apps/web

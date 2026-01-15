@@ -5,19 +5,79 @@ import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Mail, Lock, User, ArrowLeft } from 'lucide-react-native';
-import { useState } from 'react';
+import { Mail, Lock, User, ArrowLeft, Check } from 'lucide-react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../../lib/api';
+
+const defaultPolicy = {
+  minLength: 8,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumber: true,
+  requireSpecial: true,
+};
+
+const buildRequirements = (policy: typeof defaultPolicy, value: string) => [
+  { label: `${policy.minLength}+ Characters`, valid: value.length >= policy.minLength },
+  { label: 'Uppercase', valid: !policy.requireUppercase || /[A-Z]/.test(value) },
+  { label: 'Lowercase', valid: !policy.requireLowercase || /[a-z]/.test(value) },
+  { label: 'Number', valid: !policy.requireNumber || /[0-9]/.test(value) },
+  { label: 'Special', valid: !policy.requireSpecial || /[^A-Za-z0-9]/.test(value) },
+];
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+  const [serverError, setServerError] = useState('');
+  const [policy, setPolicy] = useState(defaultPolicy);
+
+  useEffect(() => {
+    const loadPolicy = async () => {
+      try {
+        const data = await api.auth.passwordPolicy();
+        if (data.policy) setPolicy({ ...defaultPolicy, ...data.policy });
+      } catch {
+        // Use default policy on failure
+      }
+    };
+    loadPolicy();
+  }, []);
+
+  const requirements = useMemo(() => buildRequirements(policy, form.password), [policy, form.password]);
+
+  const validate = () => {
+    const nextErrors: typeof errors = {};
+    if (!form.name.trim()) nextErrors.name = 'Name is required';
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) nextErrors.email = 'Valid email required';
+    if (form.password.length < policy.minLength) {
+      nextErrors.password = `Minimum ${policy.minLength} characters`;
+    } else if (policy.requireUppercase && !/[A-Z]/.test(form.password)) {
+      nextErrors.password = 'Requires uppercase';
+    } else if (policy.requireLowercase && !/[a-z]/.test(form.password)) {
+      nextErrors.password = 'Requires lowercase';
+    } else if (policy.requireNumber && !/[0-9]/.test(form.password)) {
+      nextErrors.password = 'Requires number';
+    } else if (policy.requireSpecial && !/[^A-Za-z0-9]/.test(form.password)) {
+      nextErrors.password = 'Requires special';
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
 
   const handleRegister = async () => {
+    if (!validate()) return;
     setIsLoading(true);
-    setTimeout(() => {
+    setServerError('');
+    try {
+      await api.auth.register(form.name.trim(), form.email.trim(), form.password);
+      router.replace('/(auth)/login');
+    } catch (error: any) {
+      setServerError(error?.message || 'Registration failed');
+    } finally {
       setIsLoading(false);
-      router.replace('/(tabs)');
-    }, 1500);
+    }
   };
 
   return (
