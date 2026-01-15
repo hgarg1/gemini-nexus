@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
 
 export async function GET(
@@ -8,8 +7,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const user = await getSessionUser(req);
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -39,7 +38,7 @@ export async function GET(
     }
 
     // Security check: User must be owner or collaborator or chat must be public
-    const userId = (session.user as any).id;
+    const userId = (user as any).id;
     const isOwner = chat.userId === userId;
     const isCollaborator = chat.collaborators.some((c) => c.userId === userId);
 
@@ -58,14 +57,14 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getSessionUser(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
     const title = typeof body.title === "string" ? body.title : undefined;
     const config = body.config && typeof body.config === "object" ? body.config : undefined;
     const { id: chatId } = await params;
-    const userId = (session.user as any).id;
+    const userId = (user as any).id;
 
     const data: { title?: string; config?: any } = {};
     if (title !== undefined) data.title = title;
@@ -91,11 +90,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getSessionUser(req);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id: chatId } = await params;
-    const userId = (session.user as any).id;
+    const userId = (user as any).id;
 
     await prisma.chat.delete({
       where: { id: chatId, userId }

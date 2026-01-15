@@ -89,17 +89,36 @@ export const api = {
       if (!res.ok) throw new Error('Failed to fetch chat');
       return await res.json();
     },
-    create: async () => {
-      const res = await fetchWithAuth('/chat', { method: 'POST' });
+    create: async (botId?: string) => {
+      const res = await fetchWithAuth('/chat', { 
+        method: 'POST', 
+        body: JSON.stringify(botId ? { botId, title: 'New Bot Chat' } : {}) 
+      });
       if (!res.ok) throw new Error('Failed to create chat');
       return await res.json();
     },
+    transmit: async (payload: any) => {
+      const res = await fetchWithAuth('/chat/transmit', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Failed to send message');
+      return await res.json();
+    },
     sendMessage: async (chatId: string, content: string) => {
+      // Deprecated in favor of transmit usually, but keeping for compatibility if needed
       const res = await fetchWithAuth(`/chat/${chatId}/message`, {
         method: 'POST',
         body: JSON.stringify({ content }),
       });
       if (!res.ok) throw new Error('Failed to send message');
+      return await res.json();
+    }
+  },
+  bots: {
+    list: async () => {
+      const res = await fetchWithAuth('/user/bots');
+      if (!res.ok) throw new Error('Failed to fetch bots');
       return await res.json();
     }
   }
