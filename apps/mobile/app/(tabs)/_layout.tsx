@@ -1,60 +1,62 @@
-import { Tabs } from "expo-router";
-import { View } from "react-native";
-import { BlurView } from "expo-blur";
-import { MessageSquare, Globe, Settings, Database } from "lucide-react-native";
+import { Tabs } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import { Platform, View } from 'react-native';
+import { MessageSquare, Compass, User } from 'lucide-react-native';
 
-export default function TabLayout() {
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          position: "absolute",
+          backgroundColor: Platform.OS === 'ios' ? 'transparent' : '#09090b',
+          borderTopWidth: 0,
+          elevation: 0,
+          position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
-          height: 90,
-          elevation: 0,
-          borderTopWidth: 1,
-          borderTopColor: "rgba(255,255,255,0.05)",
-          backgroundColor: "transparent",
+          height: 85,
+          paddingTop: 10,
+          paddingBottom: 30,
         },
-        tabBarBackground: () => (
-            <BlurView intensity={90} tint="dark" style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.8)" }} />
-        ),
+        tabBarBackground: () =>
+            Platform.OS === 'ios' ? (
+                <BlurView intensity={80} tint="dark" style={{ flex: 1 }} />
+            ) : undefined,
+        tabBarActiveTintColor: '#3b82f6',
+        tabBarInactiveTintColor: '#52525b',
         tabBarShowLabel: false,
-        tabBarActiveTintColor: "#00f2ff",
-        tabBarInactiveTintColor: "rgba(255,255,255,0.2)",
       }}
     >
-      <Tabs.Screen
-        name="chat"
+      <Tabs.Screen 
+        name="index" 
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View className={`items-center justify-center top-4 p-2 rounded-xl ${focused ? "bg-primary/10" : ""}`}>
-                <MessageSquare color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
+            <View className={`items-center justify-center w-12 h-12 rounded-full ${focused ? 'bg-blue-500/10' : ''}`}>
+              <MessageSquare size={24} color={color} fill={focused ? color : 'transparent'} />
             </View>
-          ),
+          )
         }}
       />
-      <Tabs.Screen
-        name="hub"
+      <Tabs.Screen 
+        name="explore" 
         options={{
-            tabBarIcon: ({ color, focused }) => (
-            <View className={`items-center justify-center top-4 p-2 rounded-xl ${focused ? "bg-primary/10" : ""}`}>
-                <Globe color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ color, focused }) => (
+            <View className={`items-center justify-center w-12 h-12 rounded-full ${focused ? 'bg-blue-500/10' : ''}`}>
+              <Compass size={24} color={color} fill={focused ? color : 'transparent'} />
             </View>
-            ),
+          )
         }}
       />
-      <Tabs.Screen
-        name="vault"
+      <Tabs.Screen 
+        name="profile" 
         options={{
-            tabBarIcon: ({ color, focused }) => (
-            <View className={`items-center justify-center top-4 p-2 rounded-xl ${focused ? "bg-primary/10" : ""}`}>
-                <Database color={color} size={24} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ color, focused }) => (
+            <View className={`items-center justify-center w-12 h-12 rounded-full ${focused ? 'bg-blue-500/10' : ''}`}>
+              <User size={24} color={color} fill={focused ? color : 'transparent'} />
             </View>
-            ),
+          )
         }}
       />
     </Tabs>

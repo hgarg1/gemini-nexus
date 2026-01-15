@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install only production deps for the web app (as you were doing)
 COPY --from=build /app/apps/web/package.json ./package.json
-COPY --from=build /app/apps/web/package-lock.json ./package-lock.json
+COPY --from=build /app/package-lock.json ./package-lock.json
 RUN npm ci --omit=dev
 
 # Copy built Next.js artifacts
