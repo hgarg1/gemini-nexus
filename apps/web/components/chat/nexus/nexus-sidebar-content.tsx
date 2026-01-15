@@ -27,13 +27,13 @@ export function NexusSidebarContent({ tags, selectedTag, onSelectTag }: NexusSid
       <StaggerContainer className="space-y-6">
         {/* Search Section */}
         <StaggerItem>
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30" />
+            <div className="relative group">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/30 group-hover:text-cyan-400 transition-colors" />
                 <input 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="SEARCH_REGISTRY..." 
-                    className="w-full bg-white/5 border border-white/5 rounded-xl py-2.5 pl-9 pr-3 text-[10px] text-white font-bold tracking-widest placeholder:text-white/20 outline-none focus:border-cyan-500/30 transition-all uppercase"
+                    className="w-full bg-white/5 border border-white/5 rounded-xl py-2.5 pl-9 pr-3 text-[10px] text-white font-bold tracking-widest placeholder:text-white/20 outline-none focus:border-cyan-500/30 focus:bg-white/10 transition-all uppercase focus:shadow-[0_0_15px_rgba(34,211,238,0.1)]"
                 />
             </div>
         </StaggerItem>
@@ -47,20 +47,23 @@ export function NexusSidebarContent({ tags, selectedTag, onSelectTag }: NexusSid
             <div className="space-y-1">
                 <button
                     onClick={() => onSelectTag(null)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${!selectedTag ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-3 group ${!selectedTag ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30" : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-1"}`}
                 >
+                    <span className={`w-1.5 h-1.5 rounded-full ${!selectedTag ? "bg-cyan-400 animate-pulse" : "bg-white/10 group-hover:bg-cyan-400"}`} />
                     Global Registry
                 </button>
                 <button
                     onClick={() => onSelectTag("Featured")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${selectedTag === "Featured" ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-3 group ${selectedTag === "Featured" ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-1"}`}
                 >
+                    <span className={`w-1.5 h-1.5 rounded-full ${selectedTag === "Featured" ? "bg-purple-400 animate-pulse" : "bg-white/10 group-hover:bg-purple-400"}`} />
                     Featured Agents
                 </button>
                 <button
                     onClick={() => onSelectTag("TopRated")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${selectedTag === "TopRated" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-3 group ${selectedTag === "TopRated" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-1"}`}
                 >
+                     <span className={`w-1.5 h-1.5 rounded-full ${selectedTag === "TopRated" ? "bg-yellow-400 animate-pulse" : "bg-white/10 group-hover:bg-yellow-400"}`} />
                     Top Rated
                 </button>
             </div>
@@ -77,7 +80,7 @@ export function NexusSidebarContent({ tags, selectedTag, onSelectTag }: NexusSid
                     <button
                         key={tag}
                         onClick={() => onSelectTag(tag)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all group ${selectedTag === tag ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all group ${selectedTag === tag ? "bg-white/10 text-white border border-white/10" : "text-white/50 hover:text-white hover:bg-white/5 hover:translate-x-1"}`}
                     >
                         <span>{tag}</span>
                         {selectedTag === tag && <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_5px_#22d3ee]" />}

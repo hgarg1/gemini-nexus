@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { BrainCircuit, Filter, Tag, Clock } from "lucide-react";
+import { BrainCircuit, Filter, Tag, Clock, Hash } from "lucide-react";
 import { StaggerContainer, StaggerItem } from "@/components/ui/nexus-ui";
 
 interface MemorySidebarContentProps {
@@ -18,15 +18,29 @@ export function MemorySidebarContent({ memories, onSelectFilter, selectedFilter 
 
     let today = 0;
     let thisWeek = 0;
+    const tagCounts: Record<string, number> = {};
     
     memories.forEach(m => {
         const d = new Date(m.updatedAt).getTime();
         const diff = now.getTime() - d;
         if (diff < oneDay) today++;
         if (diff < oneWeek) thisWeek++;
+
+        // Infer tags from label words for now (assuming label is short)
+        // or usage of explicit tags if available.
+        const words = (m.label || "").split(" ").filter((w: string) => w.length > 3);
+        words.forEach((w: string) => {
+            const key = w.toUpperCase();
+            tagCounts[key] = (tagCounts[key] || 0) + 1;
+        });
     });
 
-    return { today, thisWeek, total: memories.length };
+    const topTags = Object.entries(tagCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([tag]) => tag);
+
+    return { today, thisWeek, total: memories.length, topTags };
   }, [memories]);
 
   return (
@@ -45,16 +59,39 @@ export function MemorySidebarContent({ memories, onSelectFilter, selectedFilter 
             <div className="space-y-1">
                 <button
                     onClick={() => onSelectFilter(null)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${!selectedFilter ? "bg-primary/20 text-primary border border-primary/30" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-between group ${!selectedFilter ? "bg-primary/20 text-primary border border-primary/30" : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-1"}`}
                 >
-                    All Memories <span className="float-right opacity-50">{stats.total}</span>
+                    <span>All Memories</span>
+                    <span className={`text-[10px] ${!selectedFilter ? "text-primary/70" : "text-white/20 group-hover:text-white/50"}`}>{stats.total}</span>
                 </button>
                 <button
                     onClick={() => onSelectFilter("recent")}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${selectedFilter === "recent" ? "bg-primary/20 text-primary border border-primary/30" : "text-white/60 hover:text-white hover:bg-white/5"}`}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase transition-all flex items-center justify-between group ${selectedFilter === "recent" ? "bg-primary/20 text-primary border border-primary/30" : "text-white/60 hover:text-white hover:bg-white/5 hover:translate-x-1"}`}
                 >
-                    Recently Updated <span className="float-right opacity-50">{stats.thisWeek}</span>
+                    <span>Recently Updated</span>
+                    <span className={`text-[10px] ${selectedFilter === "recent" ? "text-primary/70" : "text-white/20 group-hover:text-white/50"}`}>{stats.thisWeek}</span>
                 </button>
+            </div>
+        </StaggerItem>
+
+        <StaggerItem className="space-y-2">
+             <h3 className="text-xs font-bold text-white/40 uppercase tracking-wider flex items-center gap-2">
+                <Hash className="w-3 h-3" />
+                Common Themes
+            </h3>
+            <div className="flex flex-wrap gap-2">
+                {stats.topTags.map(tag => (
+                    <button
+                        key={tag}
+                        onClick={() => onSelectFilter(tag)}
+                        className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${selectedFilter === tag ? "bg-white/20 text-white border border-white/30 shadow-[0_0_10px_rgba(255,255,255,0.1)]" : "bg-white/5 border border-white/10 text-white/60 hover:text-primary hover:border-primary/30 hover:-translate-y-0.5"}`}
+                    >
+                        {tag}
+                    </button>
+                ))}
+                {stats.topTags.length === 0 && (
+                    <span className="text-[10px] text-white/20 italic">No themes detected yet.</span>
+                )}
             </div>
         </StaggerItem>
 

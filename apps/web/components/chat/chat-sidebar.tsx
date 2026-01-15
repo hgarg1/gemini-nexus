@@ -57,6 +57,8 @@ interface ChatSidebarProps {
   versionMergeRequests?: any[];
   selectedBranchId?: string | null;
   onSelectBranch?: (id: string | null) => void;
+  onSelectCheckpoint?: (id: string) => void;
+  onSelectMergeRequest?: (id: string) => void;
 }
 
 export function ChatSidebar({
@@ -102,6 +104,8 @@ export function ChatSidebar({
   versionMergeRequests = [],
   selectedBranchId = null,
   onSelectBranch,
+  onSelectCheckpoint,
+  onSelectMergeRequest,
 }: ChatSidebarProps) {
   const router = useRouter();
   const [collabSearch, setCollabSearch] = useState("");
@@ -294,6 +298,8 @@ export function ChatSidebar({
                     mergeRequests={versionMergeRequests}
                     selectedBranchId={selectedBranchId}
                     onSelectBranch={onSelectBranch || (() => {})}
+                    onSelectCheckpoint={onSelectCheckpoint || (() => {})}
+                    onSelectMergeRequest={onSelectMergeRequest || (() => {})}
                 />
               ) : (
                 <>

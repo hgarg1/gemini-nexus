@@ -19,6 +19,7 @@ interface MemoryViewProps {
   onLabelChange: (val: string) => void;
   onSaveLabel: (id: string) => void;
   onDelete: (id: string) => void;
+  filterTag?: string | null;
 }
 
 export function MemoryView({
@@ -34,15 +35,30 @@ export function MemoryView({
   onLabelChange,
   onSaveLabel,
   onDelete,
+  filterTag
 }: MemoryViewProps) {
   const filteredMemories = memories
     .filter((memory) => {
-      if (!search.trim()) return true;
-      const query = search.toLowerCase();
-      return (
-        memory.label?.toLowerCase().includes(query) ||
-        memory.content?.toLowerCase().includes(query)
-      );
+      // 1. Text Search
+      if (search.trim()) {
+        const query = search.toLowerCase();
+        const matchesSearch = 
+          memory.label?.toLowerCase().includes(query) ||
+          memory.content?.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+      
+      // 2. Tag Filter (Sidebar)
+      if (filterTag) {
+        const tag = filterTag.toLowerCase();
+        // Check label words or if explicit tags existed (assuming label contains the "tag" for now as per extraction logic)
+        const matchesTag = 
+            memory.label?.toLowerCase().includes(tag) || 
+            memory.content?.toLowerCase().includes(tag);
+        if (!matchesTag) return false;
+      }
+
+      return true;
     })
     .sort((a, b) => {
       if (sort === "label") {

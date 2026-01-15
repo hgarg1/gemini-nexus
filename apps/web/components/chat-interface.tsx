@@ -19,7 +19,7 @@ import {
   SmilePlus
 } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -53,6 +53,7 @@ import { synth } from "@/lib/audio-synth";
 export default function ChatInterface({ chatId }: { chatId?: string }) {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -106,7 +107,20 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [resolvedBaseUrl, setResolvedBaseUrl] = useState("");
   const [toastQueue, setToastQueue] = useState<{ id: string; title: string; description: string }[]>([]);
-  const [activeTab, setActiveTab] = useState<"chat" | "grid" | "users" | "assets" | "memory" | "version" | "collab">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "grid" | "users" | "assets" | "memory" | "version" | "collab">((searchParams.get("tab") as any) || "chat");
+  
+  // Persist tab state to URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (activeTab && activeTab !== "chat") {
+      params.set("tab", activeTab);
+    } else {
+      params.delete("tab");
+    }
+    // Use replace to avoid building browser history for every tab switch
+    const newPath = `${window.location.pathname}?${params.toString()}`;
+    router.replace(newPath, { scroll: false });
+  }, [activeTab, router]);
   
   const [selectedNexusTag, setSelectedNexusTag] = useState<string | null>(null);
   
@@ -1668,6 +1682,8 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
         versionMergeRequests={versionMergeRequests}
         selectedBranchId={selectedBranchId}
         onSelectBranch={setSelectedBranchId}
+        onSelectCheckpoint={setSelectedCheckpointId}
+        onSelectMergeRequest={setSelectedMergeRequestId}
       />
 
       <main className="flex-1 min-h-0 flex flex-col relative z-10 pb-20 md:pb-0">
@@ -1729,6 +1745,7 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
              onLabelChange={setMemoryLabelDraft}
              onSaveLabel={saveMemoryLabel}
              onDelete={setMemoryDeleteId}
+             filterTag={memoryFilter}
           />
         ) : activeTab === "collab" ? (
           <CollaborationView
