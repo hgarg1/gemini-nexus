@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM node:22-bookworm-slim AS builder
+FROM node:22.12-bookworm-slim AS builder
 WORKDIR /app
 ENV npm_config_optional=true
 ENV npm_config_ignore_optional=false
@@ -30,10 +30,12 @@ RUN npm run db:generate
 RUN npm run build --workspace=apps/web
 
 # Compile seed scripts to JS
-RUN npx tsc apps/web/scripts/seed-admin.ts --outDir apps/web/scripts --module commonjs --target es2020 --esModuleInterop --skipLibCheck || true
+RUN npx tsc apps/web/scripts/seed-admin.ts --outDir apps/web/scripts --module commonjs --target es2020 --esModuleInterop --skipLibCheck || true \
+    && npx tsc apps/web/scripts/seed-rbac.ts --outDir apps/web/scripts --module commonjs --target es2020 --esModuleInterop --skipLibCheck || true \
+    && npx tsc apps/web/scripts/fix-admin-perms.ts --outDir apps/web/scripts --module commonjs --target es2020 --esModuleInterop --skipLibCheck || true
 
 # Stage 2: Production Runner
-FROM node:22-bookworm-slim AS runner
+FROM node:22.12-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 

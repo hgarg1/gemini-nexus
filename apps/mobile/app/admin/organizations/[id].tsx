@@ -1,12 +1,13 @@
-import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity, TextInput, Alert, RefreshControl, Image } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Link2, Users, Shield, RefreshCw, Trash2, UserX, User } from 'lucide-react-native';
+import { ArrowLeft, Link2, Users, Shield, RefreshCw, Trash2, UserX, User, Image as ImageIcon, Save } from 'lucide-react-native';
 import { api } from '../../../lib/api';
 import { Avatar } from '../../../components/ui/Avatar';
+import * as ImagePicker from 'expo-image-picker';
 
-type TabKey = 'links' | 'requests' | 'members' | 'overrides' | 'structure';
+type TabKey = 'links' | 'requests' | 'members' | 'overrides' | 'structure' | 'details';
 
 export default function AdminOrganizationDetailScreen() {
   const router = useRouter();
@@ -27,6 +28,50 @@ export default function AdminOrganizationDetailScreen() {
   const [structureLoading, setStructureLoading] = useState(false);
   const [structureError, setStructureError] = useState('');
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsForm, setDetailsForm] = useState({
+    name: '',
+    slug: '',
+    description: '',
+    pointOfContactName: '',
+    pointOfContactEmail: '',
+    pointOfContactPhone: '',
+    logo: '',
+    banner: '',
+    tagline: '',
+    mission: '',
+    industry: '',
+    website: '',
+    foundedYear: '',
+    employeeRange: '',
+    headquarters: '',
+    operatingRegions: '',
+    timeZone: '',
+    operatingModel: '',
+    productFocus: '',
+    customerSegments: '',
+    criticalWorkflows: '',
+    supportWindow: '',
+    serviceTier: '',
+    brandPalette: '',
+    brandVoice: '',
+    securityTier: '',
+    compliance: '',
+    dataClassification: '',
+    dataResidency: '',
+    riskProfile: '',
+    uptimeTarget: '',
+    deploymentModel: '',
+    identityProvider: '',
+    integrationStack: '',
+    dataWarehouse: '',
+    erpCrm: '',
+    aiUseCases: '',
+    incidentEscalation: '',
+    billingContact: '',
+    legalContact: '',
+    notes: '',
+  });
 
   const [linkLabel, setLinkLabel] = useState('');
   const [linkMaxUses, setLinkMaxUses] = useState('');
@@ -79,7 +124,29 @@ export default function AdminOrganizationDetailScreen() {
 
   useEffect(() => {
     loadData();
-  }, [orgId, activeTab]);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!org) return;
+    const profile =
+      org?.onboardingProfile && typeof org.onboardingProfile === 'object'
+        ? org.onboardingProfile
+        : {};
+    setDetailsForm({
+      name: org.name || '',
+      slug: org.slug || '',
+      description: org.description || '',
+      pointOfContactName: org.pointOfContactName || '',
+      pointOfContactEmail: org.pointOfContactEmail || '',
+      pointOfContactPhone: org.pointOfContactPhone || '',
+      logo: org.logo || '',
+      banner: org.banner || '',
+      tagline: profile.tagline || '',
+      mission: profile.mission || '',
+      industry: profile.industry || '',
+      website: profile.website || '',
+    });
+  }, [org]);
 
   useEffect(() => {
     if (activeTab === 'structure') {
@@ -93,7 +160,7 @@ export default function AdminOrganizationDetailScreen() {
     if (activeTab === 'structure') {
       loadStructure();
     }
-  }, [orgId]);
+  }, [orgId, activeTab]);
 
   const baseTitle = org?.name || 'Organization';
   const memberCount = org?._count?.members ?? members.length;
@@ -221,6 +288,73 @@ export default function AdminOrganizationDetailScreen() {
     }
   };
 
+  const handlePickImage = async (field: 'logo' | 'banner') => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      const base64Img = `data:${result.assets[0].mimeType};base64,${result.assets[0].base64}`;
+      setDetailsForm((prev) => ({ ...prev, [field]: base64Img }));
+    }
+  };
+
+  const handleSaveDetails = async () => {
+    if (!orgId) return;
+    if (!detailsForm.name.trim() || !detailsForm.slug.trim()) {
+      Alert.alert('Validation', 'Name and slug are required.');
+      return;
+    }
+    setDetailsSaving(true);
+    try {
+      const existingProfile =
+        org?.onboardingProfile && typeof org.onboardingProfile === 'object'
+          ? org.onboardingProfile
+          : {};
+      const onboardingProfile = {
+        ...existingProfile,
+        tagline: detailsForm.tagline.trim(),
+        mission: detailsForm.mission.trim(),
+        industry: detailsForm.industry.trim(),
+        website: detailsForm.website.trim(),
+      };
+      const payload = {
+        name: detailsForm.name.trim(),
+        slug: detailsForm.slug.trim(),
+        description: detailsForm.description.trim(),
+        pointOfContactName: detailsForm.pointOfContactName.trim(),
+        pointOfContactEmail: detailsForm.pointOfContactEmail.trim(),
+        pointOfContactPhone: detailsForm.pointOfContactPhone.trim(),
+        logo: detailsForm.logo || null,
+        banner: detailsForm.banner || null,
+        onboardingProfile,
+      };
+      const updated = await api.admin.organizations.update(orgId, payload);
+      const nextOrg = {
+        ...(org || {}),
+        ...updated,
+        name: payload.name,
+        slug: payload.slug,
+        description: payload.description,
+        pointOfContactName: payload.pointOfContactName,
+        pointOfContactEmail: payload.pointOfContactEmail,
+        pointOfContactPhone: payload.pointOfContactPhone,
+        logo: payload.logo,
+        banner: payload.banner,
+        onboardingProfile,
+      };
+      setOrg(nextOrg);
+      Alert.alert('Saved', 'Organization details updated.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to update organization');
+    } finally {
+      setDetailsSaving(false);
+    }
+  };
+
   const toggleCollapse = (nodeId: string) => {
     setCollapsedNodes((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
   };
@@ -273,7 +407,7 @@ export default function AdminOrganizationDetailScreen() {
 
   const renderTabs = () => (
     <View className="flex-row flex-wrap mb-4">
-      {(['links', 'requests', 'members', 'overrides', 'structure'] as TabKey[]).map((tab) => (
+      {(['details', 'links', 'requests', 'members', 'overrides', 'structure'] as TabKey[]).map((tab) => (
         <TouchableOpacity
           key={tab}
           onPress={() => setActiveTab(tab)}
@@ -413,6 +547,152 @@ export default function AdminOrganizationDetailScreen() {
                     </View>
                   ))
                 )}
+              </View>
+            )}
+
+            {activeTab === 'details' && (
+              <View>
+                <View className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-4 mb-5">
+                  <Text className="text-white font-semibold mb-4">Identity</Text>
+                  <TextInput
+                    value={detailsForm.name}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, name: text }))}
+                    placeholder="Organization name"
+                    placeholderTextColor="#52525b"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white mb-3"
+                  />
+                  <TextInput
+                    value={detailsForm.slug}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, slug: text.toLowerCase() }))}
+                    placeholder="slug"
+                    placeholderTextColor="#52525b"
+                    autoCapitalize="none"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white mb-3"
+                  />
+                  <TextInput
+                    value={detailsForm.description}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, description: text }))}
+                    placeholder="Description"
+                    placeholderTextColor="#52525b"
+                    multiline
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white min-h-[96px]"
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <View className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-4 mb-5">
+                  <Text className="text-white font-semibold mb-4">Brand Assets</Text>
+                  <View className="mb-4">
+                    <Text className="text-zinc-400 text-xs mb-2 uppercase">Logo</Text>
+                    <TouchableOpacity
+                      onPress={() => handlePickImage('logo')}
+                      className="h-24 rounded-2xl border border-zinc-800 bg-zinc-900/60 items-center justify-center overflow-hidden"
+                    >
+                      {detailsForm.logo ? (
+                        <Image source={{ uri: detailsForm.logo }} className="w-full h-full" resizeMode="cover" />
+                      ) : (
+                        <View className="items-center">
+                          <ImageIcon size={18} color="#a1a1aa" />
+                          <Text className="text-zinc-500 text-[10px] mt-2 uppercase">Upload</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  <View>
+                    <Text className="text-zinc-400 text-xs mb-2 uppercase">Banner</Text>
+                    <TouchableOpacity
+                      onPress={() => handlePickImage('banner')}
+                      className="h-28 rounded-2xl border border-zinc-800 bg-zinc-900/60 items-center justify-center overflow-hidden"
+                    >
+                      {detailsForm.banner ? (
+                        <Image source={{ uri: detailsForm.banner }} className="w-full h-full" resizeMode="cover" />
+                      ) : (
+                        <View className="items-center">
+                          <ImageIcon size={18} color="#a1a1aa" />
+                          <Text className="text-zinc-500 text-[10px] mt-2 uppercase">Upload</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-4 mb-5">
+                  <Text className="text-white font-semibold mb-4">Contacts</Text>
+                  <TextInput
+                    value={detailsForm.pointOfContactName}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, pointOfContactName: text }))}
+                    placeholder="Point of contact"
+                    placeholderTextColor="#52525b"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white mb-3"
+                  />
+                  <TextInput
+                    value={detailsForm.pointOfContactEmail}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, pointOfContactEmail: text }))}
+                    placeholder="Contact email"
+                    placeholderTextColor="#52525b"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white mb-3"
+                  />
+                  <TextInput
+                    value={detailsForm.pointOfContactPhone}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, pointOfContactPhone: text }))}
+                    placeholder="Contact phone"
+                    placeholderTextColor="#52525b"
+                    keyboardType="phone-pad"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white"
+                  />
+                </View>
+
+                <View className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-4 mb-5">
+                  <Text className="text-white font-semibold mb-4">Profile</Text>
+                  <TextInput
+                    value={detailsForm.tagline}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, tagline: text }))}
+                    placeholder="Tagline"
+                    placeholderTextColor="#52525b"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white mb-3"
+                  />
+                  <TextInput
+                    value={detailsForm.mission}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, mission: text }))}
+                    placeholder="Mission"
+                    placeholderTextColor="#52525b"
+                    multiline
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white min-h-[96px] mb-3"
+                    textAlignVertical="top"
+                  />
+                  <TextInput
+                    value={detailsForm.industry}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, industry: text }))}
+                    placeholder="Industry"
+                    placeholderTextColor="#52525b"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white mb-3"
+                  />
+                  <TextInput
+                    value={detailsForm.website}
+                    onChangeText={(text) => setDetailsForm((prev) => ({ ...prev, website: text }))}
+                    placeholder="Website"
+                    placeholderTextColor="#52525b"
+                    autoCapitalize="none"
+                    className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-3 text-white"
+                  />
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleSaveDetails}
+                  disabled={detailsSaving}
+                  className="w-full bg-white rounded-2xl p-4 items-center flex-row justify-center space-x-2"
+                >
+                  {detailsSaving ? (
+                    <ActivityIndicator color="#111827" />
+                  ) : (
+                    <Save size={16} color="#111827" />
+                  )}
+                  <Text className="text-black font-bold">
+                    {detailsSaving ? 'Saving...' : 'Save Details'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
 

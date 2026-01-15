@@ -37,6 +37,9 @@ services:
       retries: 10
 
   app:
+    build:
+      context: .
+      dockerfile: dockerfile
     image: ghcr.io/hgarg1/nexus-intelligence:latest
     env_file:
       - .env

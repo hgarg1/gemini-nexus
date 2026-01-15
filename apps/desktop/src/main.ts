@@ -7,7 +7,7 @@ let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let pendingFilePath: string | null = null; // Store file path if app is not yet ready
 
-const startUrl = process.env.NEXUS_URL || 'http://localhost:3005';
+const startUrl = process.env.NEXUS_URL || (app.isPackaged ? 'https://nexus-intelligence.archiegarg.me' : 'http://localhost:3005');
 
 // Handle file opening on macOS
 app.on('open-file', (event, filePath) => {

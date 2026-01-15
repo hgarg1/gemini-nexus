@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+dist
+build
+.git
+*.log
+nanobanana-output
+apps/desktop/dist
+apps/desktop/build
+apps/mobile/.expo
+packages/database/prisma/migrations

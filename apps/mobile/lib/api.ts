@@ -463,6 +463,14 @@ export const api = {
         if (!res.ok) throw new Error('Failed to load organizations');
         return await res.json();
       },
+      update: async (orgId: string, payload: any) => {
+        const res = await fetchWithAuth(`/admin/organizations/${orgId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to update organization');
+        return await res.json();
+      },
       structure: {
         get: async (orgId: string) => {
           const res = await fetchWithAuth(`/admin/organizations/${orgId}/structure`);
