@@ -1,6 +1,8 @@
 # Stage 1: Build (Debian slim)
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+RUN corepack enable
+RUN corepack prepare npm@11.7.0 --activate
 # (Optional but recommended) CA certs for fetching deps + prisma engines cleanly
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -27,6 +29,8 @@ RUN npm run build --workspace=apps/web
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+RUN corepack enable
+RUN corepack prepare npm@11.7.0 --activate
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
