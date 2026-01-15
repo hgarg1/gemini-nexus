@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
                 scoredChunks.sort((a, b) => b.score - a.score);
                 const topChunks = scoredChunks.slice(0, 3);
                 
-                if (topChunks.length > 0 && topChunks[0].score > 0.6) { // Threshold
+                if (topChunks.length > 0 && topChunks[0]?.score! > 0.6) { // Threshold
                     ragContext = "\n\nRELEVANT KNOWLEDGE BASE CONTEXT:\n" + 
                                  topChunks.map(c => `- ${c.content}`).join("\n");
                 }

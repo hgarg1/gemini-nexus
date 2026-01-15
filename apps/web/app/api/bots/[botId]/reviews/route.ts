@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ botI
   const { botId } = await params;
   try {
     const reviews = await prisma.botReview.findMany({
-      where: { botId: params.botId },
+      where: { botId: botId },
       include: {
         user: { select: { name: true, image: true } }
       },
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bot
 
   const userId = (session.user as any).id;
   const { botId } = await params;
+  const { rating, comment } = await req.json();
 
   if (!rating || rating < 1 || rating > 5) {
     return NextResponse.json({ error: "Invalid rating" }, { status: 400 });
@@ -34,20 +35,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bot
   try {
     // Upsert review
     const review = await prisma.botReview.upsert({
-      where: { botId_userId: { botId: params.botId, userId } },
+      where: { botId_userId: { botId: botId, userId } },
       update: { rating, comment },
-      create: { botId: params.botId, userId, rating, comment }
+      create: { botId: botId, userId, rating, comment }
     });
 
     // Update Bot aggregate stats
     const aggregates = await prisma.botReview.aggregate({
-      where: { botId: params.botId },
+      where: { botId: botId },
       _avg: { rating: true },
       _count: { rating: true }
     });
 
     await prisma.bot.update({
-      where: { id: params.botId },
+      where: { id: botId },
       data: {
         avgRating: aggregates._avg.rating || 0,
         reviewCount: aggregates._count.rating || 0

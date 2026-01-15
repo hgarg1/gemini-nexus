@@ -58,7 +58,7 @@ export function BotBuilder({ initialData, onSave, onCancel }: BotBuilderProps) {
   };
 
   const removeTag = (tag: string) => {
-    setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
+    setFormData(prev => ({ ...prev, tags: prev.tags.filter((t: string) => t !== tag) }));
   };
   const [isSaving, setIsSaving] = useState(false);
   const [showSimulation, setShowSimulation] = useState(true);
@@ -407,7 +407,7 @@ export function BotBuilder({ initialData, onSave, onCancel }: BotBuilderProps) {
                         </button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {formData.tags.map(tag => (
+                        {formData.tags.map((tag: string) => (
                             <span key={tag} className="flex items-center gap-1 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wider">
                                 {tag}
                                 <button onClick={() => removeTag(tag)} className="hover:text-white"><X className="w-3 h-3" /></button>

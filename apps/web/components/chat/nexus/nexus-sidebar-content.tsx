@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Compass, Hash, Sparkles, Filter, Star } from "lucide-react";
+import { Compass, Hash, Sparkles, Filter, Star, Search } from "lucide-react";
 import { StaggerContainer, StaggerItem, DecodingText } from "@/components/ui/nexus-ui";
 
 interface NexusSidebarContentProps {

@@ -2,9 +2,14 @@ import { MetadataRoute } from "next";
 import { prisma } from "@repo/database";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
-  const robotsSetting = await prisma.systemSettings.findUnique({
-    where: { key: "robots_txt" },
-  });
+  let robotsSetting = null;
+  try {
+    robotsSetting = await prisma.systemSettings.findUnique({
+      where: { key: "robots_txt" },
+    });
+  } catch (e) {
+    console.warn("Could not fetch robots.txt settings from DB, using defaults.");
+  }
 
   // Default if no setting found
   if (!robotsSetting) {

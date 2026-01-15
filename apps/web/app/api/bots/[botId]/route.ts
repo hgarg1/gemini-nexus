@@ -3,7 +3,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@repo/database";
 import { NextResponse } from "next/server";
 
-export async function GET(req: Request, { params }: { params: { botId: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+  const { botId } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return new NextResponse("Unauthorized", { status: 401 });
@@ -11,7 +12,7 @@ export async function GET(req: Request, { params }: { params: { botId: string } 
 
   try {
     const bot = await prisma.bot.findUnique({
-      where: { id: params.botId },
+      where: { id: botId },
       include: { usage: true, reviews: { include: { user: true }, orderBy: { createdAt: "desc" }, take: 5 } }
     });
 
@@ -29,7 +30,8 @@ export async function GET(req: Request, { params }: { params: { botId: string } 
   }
 }
 
-export async function PATCH(req: Request, { params }: { params: { botId: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+    const { botId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -40,7 +42,7 @@ export async function PATCH(req: Request, { params }: { params: { botId: string 
       const { name, description, systemInstruction, isPublic, config, status, skills, appearance, tags } = body;
 
       const bot = await prisma.bot.findUnique({
-        where: { id: params.botId },
+        where: { id: botId },
       });
 
       if (!bot) return new NextResponse("Bot not found", { status: 404 });
@@ -49,7 +51,7 @@ export async function PATCH(req: Request, { params }: { params: { botId: string 
       }
   
       const updatedBot = await prisma.bot.update({
-        where: { id: params.botId },
+        where: { id: botId },
         data: {
           name,
           description,
@@ -70,7 +72,8 @@ export async function PATCH(req: Request, { params }: { params: { botId: string 
     }
 }
 
-export async function DELETE(req: Request, { params }: { params: { botId: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ botId: string }> }) {
+    const { botId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -78,7 +81,7 @@ export async function DELETE(req: Request, { params }: { params: { botId: string
 
     try {
         const bot = await prisma.bot.findUnique({
-            where: { id: params.botId },
+            where: { id: botId },
         });
 
         if (!bot) return new NextResponse("Bot not found", { status: 404 });
@@ -90,7 +93,7 @@ export async function DELETE(req: Request, { params }: { params: { botId: string
         }
 
         await prisma.bot.delete({
-            where: { id: params.botId }
+            where: { id: botId }
         });
 
         return new NextResponse(null, { status: 200 });

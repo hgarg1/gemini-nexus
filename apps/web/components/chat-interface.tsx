@@ -592,7 +592,10 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
       setDirectThreads(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(key => {
-          next[key] = updateMessages(next[key]);
+          const messages = next[key];
+          if (messages) {
+            next[key] = updateMessages(messages);
+          }
         });
         return next;
       });
@@ -801,7 +804,7 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
           const modelsData = await modelsRes.json();
           const botsData = await botsRes.json();
           
-          let allModels = [];
+          let allModels: any[] = [];
           
           if (modelsData.models) {
             allModels = [...modelsData.models];
