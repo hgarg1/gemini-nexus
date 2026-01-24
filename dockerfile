@@ -86,5 +86,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-ENTRYPOINT ["./apps/web/scripts/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/apps/web/scripts/docker-entrypoint.sh"]
 CMD ["node", "apps/web/server.js"]
