@@ -66,6 +66,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 # Ensure packages/database/prisma/schema.prisma is available for db push
 COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 
+# Install dependencies for realtime service (since they are pruned from standalone build)
+RUN cd packages/realtime && npm install --omit=dev \
+    && chown -R nextjs:nodejs node_modules
+
 # Copy the compiled scripts and entrypoint
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/scripts ./apps/web/scripts
 RUN chmod +x ./apps/web/scripts/docker-entrypoint.sh
