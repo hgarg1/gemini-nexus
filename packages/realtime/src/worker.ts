@@ -1,6 +1,6 @@
 import { extractCheckpointSuggestion, generateGeminiResponse, extractMemories, generateImageLabels } from "@repo/ai";
 import { computeDelta, materializeState, normalizeMessage } from "@repo/database";
-import { prisma } from "../../database"; 
+import { prisma } from "@repo/database"; 
 import { Server } from "socket.io";
 import { Queue, Worker } from "bullmq";
 import { Redis } from "ioredis";
@@ -106,11 +106,26 @@ export function setupWorker(io: Server) {
           }
         }
 
-        // 3. Update DB
-        await prisma.message.update({
-          where: { id: modelMessageId },
-          data: { content: responseText }
-        });
+        // 3. Update DB with retry logic
+        let updateRetries = 5;
+        while (updateRetries > 0) {
+          try {
+            await prisma.message.update({
+              where: { id: modelMessageId },
+              data: { content: responseText }
+            });
+            break; // Success
+          } catch (e: any) {
+            // P2025: Record to update not found.
+            if (e.code === 'P2025' && updateRetries > 1) {
+              console.log(`>> MESSAGE_NOT_FOUND_RETRYING: ${modelMessageId} (${updateRetries} attempts left)`);
+              updateRetries--;
+              await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms
+              continue;
+            }
+            throw e; // Rethrow other errors or if retries exhausted
+          }
+        }
 
         if (userId) {
           try {
