@@ -105,8 +105,8 @@ setInterval(async () => {
   }
 }, 5000);
 
-const PORT = process.env.SOCKET_PORT || 3006;
-httpServer.listen(PORT, () => {
+const PORT = parseInt(process.env.SOCKET_PORT || "3006", 10);
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`>> REALTIME_NEXUS_OPERATIONAL_ON_PORT_${PORT}`);
 });
 
