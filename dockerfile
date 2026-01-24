@@ -25,6 +25,9 @@ RUN npm ci --include=optional \
 # We use the root script which delegates to turbo to run it in the correct package context
 RUN npm run db:generate
 
+# Build the AI package so it can be consumed by web
+RUN npm run build --workspace=packages/ai
+
 # Build the web application
 # This will generate the .next/standalone folder due to output: "standalone" in next.config.js
 RUN npm run build --workspace=apps/web
