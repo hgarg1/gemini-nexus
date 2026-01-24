@@ -1,8 +1,12 @@
 {
   "extends": "@repo/typescript-config/base.json",
   "compilerOptions": {
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@repo/database": ["../../packages/database/index.ts"],
+      "@repo/ai": ["../../packages/ai/src/index.ts"]
+    }
   },
-  "include": ["src", "../../apps/web/lib", "../../packages/database"],
+  "include": ["src"],
   "exclude": ["node_modules", "dist"]
 }
