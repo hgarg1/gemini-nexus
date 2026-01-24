@@ -70,8 +70,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 
 # Install dependencies for realtime service (since they are pruned from standalone build)
-RUN cd packages/realtime && npm install --omit=dev \
-    && chown -R nextjs:nodejs node_modules
+# Also install dependencies for @repo/ai because of potential symlinking/resolution issues
+RUN cd packages/ai && npm install --omit=dev \
+    && cd ../realtime && npm install --omit=dev \
+    && chown -R nextjs:nodejs ../ai/node_modules node_modules
 
 # Copy the compiled scripts and entrypoint
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/scripts ./apps/web/scripts
