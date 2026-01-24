@@ -45,6 +45,7 @@ services:
     environment:
       RUN_PROD_SCRIPTS: "false"
       SOCKET_PORT: 3006
+      REDIS_URL: "redis://redis:6379"
     depends_on:
       postgres:
         condition: service_healthy
