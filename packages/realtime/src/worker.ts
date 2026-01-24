@@ -1,6 +1,4 @@
-import { extractCheckpointSuggestion, generateGeminiResponse } from "../../../apps/web/lib/gemini"; 
-import { extractMemories, generateImageLabels } from "../../../apps/web/lib/gemini-pro";
-import { computeDelta, materializeState, normalizeMessage } from "../../../apps/web/lib/versioning";
+import { extractCheckpointSuggestion, generateGeminiResponse, extractMemories, generateImageLabels } from "@repo/ai";import { computeDelta, materializeState, normalizeMessage } from "../../../apps/web/lib/versioning";
 import { prisma } from "../../database"; 
 import { Server } from "socket.io";
 import { Queue, Worker } from "bullmq";

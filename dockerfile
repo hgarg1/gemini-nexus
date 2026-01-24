@@ -72,7 +72,6 @@ RUN cd packages/realtime && npm install --omit=dev \
 
 # Copy the compiled scripts and entrypoint
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/scripts ./apps/web/scripts
-COPY --from=builder --chown=nextjs:nodejs /app/apps/web/lib ./apps/web/lib
 RUN chmod +x ./apps/web/scripts/docker-entrypoint.sh
 
 USER nextjs

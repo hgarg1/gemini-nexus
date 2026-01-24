@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getGeminiModel } from "@/lib/gemini";
+import { getGeminiModel } from "@repo/ai";
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);

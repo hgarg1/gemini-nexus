@@ -13,6 +13,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@next-auth/prisma-adapter": "^1.0.7",
+    "@repo/ai": "file:../../packages/ai",
     "@repo/database": "*",
     "@simplewebauthn/browser": "^13.2.2",
     "@simplewebauthn/server": "^13.2.2",

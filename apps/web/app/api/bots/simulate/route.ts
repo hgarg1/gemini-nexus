@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getGeminiModel, generateEmbedding, cosineSimilarity } from "@/lib/gemini";
+import { getGeminiModel, generateEmbedding, cosineSimilarity } from "@repo/ai";
 import { prisma } from "@repo/database";
 
 export async function POST(req: NextRequest) {

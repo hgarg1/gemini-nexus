@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
-import { listGeminiModels } from "@/lib/gemini";
+import { listGeminiModels } from "@repo/ai";
 
 export async function GET(req: NextRequest) {
   try {

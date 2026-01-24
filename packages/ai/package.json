@@ -1,0 +1,26 @@
+{
+  "name": "@repo/ai",
+  "version": "0.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "tsup": "^8.3.5",
+    "typescript": "5.9.2"
+  }
+}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@repo/database";
-import { generateEmbedding } from "@/lib/gemini";
+import { generateEmbedding } from "@repo/ai";
 
 // Helper to chunk text
 function chunkText(text: string, chunkSize: number = 500, overlap: number = 50) {
