@@ -74,6 +74,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/packages ./packages
 RUN cd packages/ai && npm install --omit=dev \
     && cd ../database && npm install --omit=dev && npx prisma generate \
     && cd ../realtime && npm install --omit=dev \
+    # Force manual symlinks for internal packages to bypass potential npm resolution issues in Docker
+    && mkdir -p node_modules/@repo \
+    && ln -sf /app/packages/ai node_modules/@repo/ai \
+    && ln -sf /app/packages/database node_modules/@repo/database \
     && chown -R nextjs:nodejs ../ai/node_modules ../database/node_modules node_modules
 
 # Copy the compiled scripts and entrypoint
