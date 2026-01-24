@@ -38,7 +38,8 @@ services:
 
   realtime:
     image: ghcr.io/hgarg1/nexus-intelligence:latest
-    command: ["tsx", "packages/realtime/src/index.ts"]
+    working_dir: /app/packages/realtime
+    command: ["tsx", "src/index.ts"]
     env_file:
       - .env
     environment:
