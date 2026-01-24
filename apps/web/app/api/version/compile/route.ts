@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
-import { materializeState } from "@/lib/versioning";
+import { materializeState } from "@repo/database";
 
 export async function POST(req: NextRequest) {
   try {

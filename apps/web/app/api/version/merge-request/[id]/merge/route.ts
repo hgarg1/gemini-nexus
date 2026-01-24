@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/mobile-auth";
 import { prisma } from "@repo/database";
-import { computeDelta, materializeState, type CheckpointDelta } from "@/lib/versioning";
+import { computeDelta, materializeState, type CheckpointDelta } from "@repo/database";
 
 const getChainIds = async (checkpointId: string) => {
   const ids: string[] = [];
