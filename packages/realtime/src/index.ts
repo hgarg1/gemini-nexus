@@ -20,10 +20,19 @@ const io = new Server(httpServer, {
 
 setupWorker(io);
 
-const pubClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
-const subClient = pubClient.duplicate();
+try {
+  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  console.log(`>> CONNECTING_REDIS: ${redisUrl}`);
+  const pubClient = new Redis(redisUrl);
+  const subClient = pubClient.duplicate();
+  
+  pubClient.on("error", (err) => console.error(">> REDIS_PUB_ERROR", err));
+  subClient.on("error", (err) => console.error(">> REDIS_SUB_ERROR", err));
 
-io.adapter(createAdapter(pubClient, subClient));
+  io.adapter(createAdapter(pubClient, subClient));
+} catch (err) {
+  console.error(">> REDIS_ADAPTER_SETUP_FAILED", err);
+}
 
 // Add basic request handler to debug HTTP connectivity
 httpServer.on("request", (req, res) => {
