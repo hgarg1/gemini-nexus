@@ -7,7 +7,7 @@ import path from "path";
 
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
-import { prisma } from "../../database";
+import { prisma } from "@repo/database";
 import { setupWorker } from "./worker";
 
 const httpServer = createServer();
@@ -24,6 +24,19 @@ const pubClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 const subClient = pubClient.duplicate();
 
 io.adapter(createAdapter(pubClient, subClient));
+
+// Add basic request handler to debug HTTP connectivity
+httpServer.on("request", (req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200);
+    res.end("OK");
+    return;
+  }
+  // Log incoming requests that aren't handled by Socket.IO
+  if (!req.url?.startsWith("/socket.io/")) {
+    // console.log(`>> UNHANDLED_REQUEST: ${req.method} ${req.url}`);
+  }
+});
 
 io.on("connection", (socket) => {
   console.log(`>> AGENT_CONNECTED: ${socket.id}`);
@@ -95,4 +108,12 @@ setInterval(async () => {
 const PORT = process.env.SOCKET_PORT || 3006;
 httpServer.listen(PORT, () => {
   console.log(`>> REALTIME_NEXUS_OPERATIONAL_ON_PORT_${PORT}`);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error(">> UNCAUGHT_EXCEPTION", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error(">> UNHANDLED_REJECTION", reason);
 });
