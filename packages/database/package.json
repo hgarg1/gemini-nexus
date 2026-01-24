@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "prisma": "^5.x",
-    "typescript": "^5.x"
+    "typescript": "^5.x",
+    "@repo/typescript-config": "file:../typescript-config"
   }
 }
