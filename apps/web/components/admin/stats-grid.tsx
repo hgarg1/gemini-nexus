@@ -19,7 +19,7 @@ export function StatsGrid({ stats: initialStats }: StatsGridProps) {
   const [pulse, setPulse] = useState(false);
 
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3006";
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
     const socket = io(socketUrl);
 
     socket.on("system-telemetry", (data) => {

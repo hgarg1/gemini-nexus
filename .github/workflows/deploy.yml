@@ -48,10 +48,16 @@ jobs:
 
             cd /opt/nexus-intelligence
 
-            docker compose pull
-            docker compose up -d --remove-orphans
+            sudo docker compose pull
+            sudo docker compose up -d --remove-orphans
 
             # update nginx snippet (domain + port for this app)
             sudo /usr/local/bin/nginx-proxy-snippet-sync nexus-intelligence.archiegarg.me 18002
 
-            docker image prune -f
+            sudo /usr/local/bin/install_compose_systemd.sh \
+              --name nexus-intelligence \
+              --dir /opt/nexus-intelligence \
+              --compose-file docker-compose.yml \
+              --ensure-restart-policy true
+
+            sudo docker image prune -f

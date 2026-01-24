@@ -16,6 +16,7 @@
     "@repo/database": "*",
     "@simplewebauthn/browser": "^13.2.2",
     "@simplewebauthn/server": "^13.2.2",
+    "@socket.io/redis-adapter": "^8.3.0",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.66.4",

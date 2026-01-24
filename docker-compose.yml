@@ -36,15 +36,27 @@ services:
       timeout: 10s
       retries: 10
 
+  realtime:
+    image: ghcr.io/hgarg1/nexus-intelligence:latest
+    command: ["tsx", "packages/realtime/src/index.ts"]
+    env_file:
+      - .env
+    environment:
+      RUN_PROD_SCRIPTS: "false"
+      SOCKET_PORT: 3006
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   app:
-    build:
-      context: .
-      dockerfile: dockerfile
     image: ghcr.io/hgarg1/nexus-intelligence:latest
     env_file:
       - .env
     environment:
       RUN_PROD_SCRIPTS: "true"
+      REALTIME_SERVICE_URL: "http://realtime:3006"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +64,8 @@ services:
         condition: service_healthy
       clamav:
         condition: service_healthy
+      realtime:
+        condition: service_started
     ports:
       - "127.0.0.1:18002:3000"
 

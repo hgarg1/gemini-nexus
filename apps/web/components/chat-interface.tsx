@@ -534,7 +534,7 @@ export default function ChatInterface({ chatId }: { chatId?: string }) {
 
   // Initialize Socket
   useEffect(() => {
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3006";
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
     const socket = io(socketUrl);
     socketRef.current = socket;
 
