@@ -14,6 +14,12 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
-    "target": "ES2022"
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": {
+      "@repo/database": ["./packages/database/index.ts"],
+      "@repo/ai": ["./packages/ai/src/index.ts"],
+      "@repo/realtime/*": ["./packages/realtime/src/*"]
+    }
   }
 }
